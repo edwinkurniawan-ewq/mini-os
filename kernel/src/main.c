@@ -9,6 +9,8 @@ void memory_init(void);
 void task_init(void);
 void timer_init(void);
 void vfs_init(void);
+void sync_init(void);
+void protect_init(void);
 
 void kernel_main(void) {
     vga_set_color(0x0F);
@@ -21,6 +23,8 @@ void kernel_main(void) {
     timer_init();
     keyboard_init();
     task_init();
+    sync_init();
+    protect_init();
     vfs_init();
 
     vga_puts("INIT SELESAI\n");

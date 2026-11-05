@@ -4,15 +4,25 @@ LD      = ld
 OBJCOPY = objcopy
 QEMU    = qemu-system-i386
 
-CFLAGS  = -m32 -ffreestanding -fno-stack-protector -fno-builtin -Wall -Wextra -Ikernel/include
+CFLAGS  = -m32 -ffreestanding -fno-stack-protector -fno-builtin -Wall -Wextra -Ikernel/include -pipe
 ASFLAGS = -f win32
 LDFLAGS = -m i386pe --image-base 0x100000 -T boot/linker.ld
 
 TARGET_PE  = kernel.exe
 TARGET_ELF = kernel.bin
 
-ASM_SOURCES = boot/boot.asm
-C_SOURCES   = drivers/vga.c kernel/src/cli.c kernel/src/stubs.c kernel/src/main.c
+ASM_SOURCES = boot/boot.asm \
+              kernel/src/switch.asm
+
+C_SOURCES   = drivers/vga.c \
+              drivers/timer.c \
+              kernel/src/cli.c \
+              kernel/src/main.c \
+              kernel/src/stubs.c \
+              kernel/src/task.c \
+              kernel/src/sync.c \
+              kernel/src/protect.c \
+              kernel/src/tests.c
 
 OBJS = $(ASM_SOURCES:.asm=.o) $(C_SOURCES:.c=.o)
 
