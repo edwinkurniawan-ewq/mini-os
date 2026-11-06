@@ -4,10 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct memory_chunk {
-    size_t size;                
-    int is_free;                
-    struct memory_chunk *next;  
+typedef struct __attribute__((aligned(16))) memory_chunk {
+    size_t size;
+    int is_free;
+    struct memory_chunk *next;
 } memory_chunk_t;
 
 void memory_init(void); 
