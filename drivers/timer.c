@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "task.h"
 
 /*
  * Programmable Interval Timer (8253/8254) — Channel 0
@@ -26,7 +27,7 @@ static inline void outb(uint16_t port, uint8_t val) {
 /* Called from IRQ0 handler — wired by Edwin in Week 2 */
 void timer_tick(void) {
     tick_count++;
-    /* ponytail: call scheduler (schedule()) here in Week 2 after switch.asm */
+    schedule();               /* preemptive switch — fires when IDT/IRQ0 wired */
 }
 
 uint32_t timer_get_ticks(void) {

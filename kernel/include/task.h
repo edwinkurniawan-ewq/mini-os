@@ -27,8 +27,10 @@ typedef struct {
 
 void  task_init(void);
 int   task_create(const char *name, void (*entry)(void));
-void  task_yield(void);        /* cooperative yield — stub until Week 2 */
+void  task_yield(void);        /* cooperative yield — calls schedule() */
+void  task_exit(void);         /* mark current TERMINATED, switch away */
 void  task_print_all(void);    /* CLI: list all threads & states */
+void  schedule(void);          /* Round Robin scheduler (cooperative) */
 
 extern tcb_t *current_task;
 extern tcb_t  task_table[MAX_TASKS];

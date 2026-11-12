@@ -6,7 +6,7 @@
  * Test harness — functions exposed via CLI commands (registered by Edwin)
  *
  * Week 1:  test_tasks()   — create demo threads, print TCB table
- * Week 2:  test_race()    — shared counter with/without mutex
+ * Week 3:  test_race()    — shared counter with/without mutex
  *          test_deadlock() — two threads, two mutexes, circular wait + fix
  * Week 3:  test_malloc()  — alloc/free/OOM demo
  *          test_vfs()     — CRUD on RAMDisk
@@ -26,12 +26,10 @@ void test_tasks(void) {
     task_print_all();
 }
 
-/* ----- Week 2 stubs ------------------------------------------------------- */
-
-void test_race(void)     { vga_puts("[TEST] test_race: diimplementasi Week 2\n"); }
-void test_deadlock(void) { vga_puts("[TEST] test_deadlock: diimplementasi Week 2\n"); }
-
 /* ----- Week 3 stubs ------------------------------------------------------- */
+
+void test_race(void)     { vga_puts("[TEST] test_race: diimplementasi Week 3\n"); }
+void test_deadlock(void) { vga_puts("[TEST] test_deadlock: diimplementasi Week 3\n"); }
 
 void test_malloc(void)   { vga_puts("[TEST] test_malloc: diimplementasi Week 3\n"); }
 void test_vfs(void)      { vga_puts("[TEST] test_vfs: diimplementasi Week 3\n"); }
