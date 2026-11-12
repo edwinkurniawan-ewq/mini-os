@@ -1,3 +1,4 @@
+#include "thread.h"
 #include "vga.h"
 
 void cli_init(void);
@@ -6,7 +7,7 @@ void gdt_init(void);
 void idt_init(void);
 void keyboard_init(void);
 void memory_init(void);
-void task_init(void);
+void thread_init(void);
 void timer_init(void);
 void vfs_init(void);
 
@@ -20,10 +21,17 @@ void kernel_main(void) {
     memory_init();
     timer_init();
     keyboard_init();
-    task_init();
+    
+    // Ini yang diubah dari task_init() menjadi thread_init()
+    thread_init(); 
+    
     vfs_init();
 
     vga_puts("INIT SELESAI\n");
     cli_init();
     cli_run();
+
+    while (1) {
+        __asm__ __volatile__("hlt");
+    }
 }

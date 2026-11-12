@@ -12,7 +12,7 @@ TARGET_PE  = kernel.exe
 TARGET_ELF = kernel.bin
 
 ASM_SOURCES = boot/boot.asm
-C_SOURCES   = drivers/vga.c kernel/src/cli.c kernel/src/stubs.c kernel/src/main.c
+C_SOURCES   = drivers/vga.c drivers/keyboard.c kernel/src/thread.c kernel/src/cli.c kernel/src/stubs.c kernel/src/main.c
 
 OBJS = $(ASM_SOURCES:.asm=.o) $(C_SOURCES:.c=.o)
 
