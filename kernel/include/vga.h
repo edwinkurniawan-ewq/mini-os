@@ -1,7 +1,12 @@
+<<<<<<< HEAD
 #ifndef VGA_H_HEADER
 #define VGA_H_HEADER
 
 #include <stddef.h>
+=======
+#ifndef VGA_DRIVER_H
+#define VGA_DRIVER_H
+>>>>>>> origin/main
 #include <stdint.h>
 
 #define VGA_W 80
@@ -13,4 +18,4 @@ void vga_putc(char c);
 void vga_backspace(void);
 void vga_set_color(uint8_t color);
 
-#endif
+#endif /* VGA_DRIVER_H */
