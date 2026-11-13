@@ -148,7 +148,6 @@ mini-os/
   * Penyusunan Laporan Tugas Besar (target 10–15 halaman).
   * Finalisasi slide presentasi dan demonstrasi teknis Mini OS.
 
----
 
 ## 📜 Aturan Kolaborasi Kode
 
