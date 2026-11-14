@@ -18,6 +18,7 @@ C_SOURCES   = drivers/vga.c \
               drivers/timer.c \
               kernel/src/cli.c \
               kernel/src/main.c \
+              kernel/src/memory.c \
               kernel/src/stubs.c \
               kernel/src/task.c \
               kernel/src/sync.c \

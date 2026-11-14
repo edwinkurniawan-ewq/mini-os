@@ -2,7 +2,6 @@
 void gdt_init(void) {}
 void idt_init(void) {}
 void timer_init(void) {}
-void memory_init(void) {}
 void vfs_init(void) {}
 =======
 /* Stubs for modules not yet implemented — replaced as each module lands */
