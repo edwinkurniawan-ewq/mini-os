@@ -44,19 +44,18 @@ static int streq(const char *a, const char *b) {
 static void run_command(const char *cmd) {
     if (cmd[0] == 0) return;
 
-    if (streq(cmd, "help")) {
+if (streq(cmd, "help")) {
         vga_puts("Perintah yang tersedia:\n");
         vga_puts("  help     - tampilkan daftar perintah\n");
         vga_puts("  version  - tampilkan versi WOWIT OS\n");
         vga_puts("  thread   - Uji Coba Pengelolaan Thread (CPMK 2)\n"); 
+        vga_puts("  deadlock - Uji Coba Mutex & Deadlock (CPMK 5)\n"); // <-- Tambah teks ini
         vga_puts("  clear    - bersihkan layar\n");
-    } else if (streq(cmd, "version")) {
-        vga_puts("WOWIT OS v0.1 (x86 32-bit, Multiboot)\n");
-        
-    // PASTIKAN BLOK INI ADA DI KODEMU:
+    // ...
     } else if (streq(cmd, "thread")) { 
         run_thread_demo();
-        
+    } else if (streq(cmd, "deadlock")) { // <-- Tambahkan Blok Ini
+        run_deadlock_demo();
     } else if (streq(cmd, "clear")) {
         vga_clear();
     } else {
