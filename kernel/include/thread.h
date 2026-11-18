@@ -21,5 +21,6 @@ typedef struct {
 
 void thread_init(void);
 void run_thread_demo(void);
+void run_deadlock_demo(void);
 
 #endif

@@ -15,16 +15,19 @@ ASM_SOURCES = boot/boot.asm \
               kernel/src/switch.asm
 
 C_SOURCES   = drivers/vga.c \
+              drivers/keyboard.c \
               drivers/timer.c \
               kernel/src/cli.c \
+              kernel/src/finance.c \
               kernel/src/main.c \
               kernel/src/memory.c \
               kernel/src/stubs.c \
+              kernel/src/thread.c \
               kernel/src/task.c \
               kernel/src/sync.c \
               kernel/src/protect.c \
               kernel/src/tests.c
-
+              
 OBJS = $(ASM_SOURCES:.asm=.o) $(C_SOURCES:.c=.o)
 
 all: $(TARGET_ELF)
