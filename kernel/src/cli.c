@@ -3,6 +3,7 @@
 #include "kernel.h"
 #include "cli.h"
 #include "thread.h"
+#include "finance.h"
 
 void vga_putc(char c);
 void vga_backspace(void);
@@ -40,22 +41,33 @@ static int streq(const char *a, const char *b) {
     return *a == *b;
 }
 
+static int starts_with(const char* str, const char* prefix) {
+    while (*prefix) {
+        if (*str++ != *prefix++) return 0;
+    }
+    return (*str == ' ' || *str == '\0');
+}
+
 // FUNGSI INI YANG DIUPDATE DARI LANGKAH 3
 static void run_command(const char *cmd) {
     if (cmd[0] == 0) return;
 
-if (streq(cmd, "help")) {
+    if (streq(cmd, "help")) {
         vga_puts("Perintah yang tersedia:\n");
         vga_puts("  help     - tampilkan daftar perintah\n");
         vga_puts("  version  - tampilkan versi WOWIT OS\n");
-        vga_puts("  thread   - Uji Coba Pengelolaan Thread (CPMK 2)\n"); 
-        vga_puts("  deadlock - Uji Coba Mutex & Deadlock (CPMK 5)\n"); // <-- Tambah teks ini
+        vga_puts("  thread   - Uji Coba Pengelolaan Thread (CPMK 2)\n");
+        vga_puts("  deadlock - Uji Coba Mutex & Deadlock (CPMK 5)\n");
+        vga_puts("  kas      - Buka Aplikasi Pencatat Keuangan \n");
         vga_puts("  clear    - bersihkan layar\n");
-    // ...
-    } else if (streq(cmd, "thread")) { 
+    } else if (streq(cmd, "version")) {
+        vga_puts("WOWIT OS v1.0 - Kernel Bare-Metal x86\n");
+    } else if (streq(cmd, "thread")) {
         run_thread_demo();
-    } else if (streq(cmd, "deadlock")) { // <-- Tambahkan Blok Ini
+    } else if (streq(cmd, "deadlock")) {
         run_deadlock_demo();
+    } else if (streq(cmd, "kas")) {
+        finance_run();
     } else if (streq(cmd, "clear")) {
         vga_clear();
     } else {
