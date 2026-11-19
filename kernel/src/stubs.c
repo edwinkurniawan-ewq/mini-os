@@ -1,3 +1,2 @@
 void gdt_init(void) {}
 void idt_init(void) {}
-void vfs_init(void) {}

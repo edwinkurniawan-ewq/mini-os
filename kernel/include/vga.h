@@ -13,5 +13,7 @@ void vga_set_color(uint8_t color);
 
 void vga_scroll_up(void);
 void vga_scroll_down(void);
+void vga_scroll_home(void);
+void vga_scroll_end(void);
 
 #endif 

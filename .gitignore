@@ -1,4 +1,6 @@
 # Build artifacts
+build/
+*.d
 *.o
 *.bin
 *.exe
