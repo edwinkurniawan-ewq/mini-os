@@ -43,7 +43,7 @@ static int chunk_is_valid(const memory_chunk_t *chunk) {
     if (chunk->is_free != 0 && chunk->is_free != 1) {
         return 0;
     }
-.
+
     if (chunk->next != NULL) {
         uintptr_t expected_next = data_addr + chunk->size;
 
