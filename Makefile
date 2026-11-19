@@ -15,23 +15,23 @@ TARGET_PE  = $(BUILD)/kernel.exe
 TARGET_ELF = $(BUILD)/kernel.bin
 
 ASM_SOURCES = boot/boot.asm \
-              kernel/process/switch.asm
+              process/switch.asm
 
 C_SOURCES   = drivers/vga.c \
               drivers/keyboard.c \
               drivers/timer.c \
               kernel/main.c \
               kernel/stubs.c \
-              kernel/cli/cli.c \
-              kernel/finance/finance.c \
-              kernel/logbook/logbook.c \
-              kernel/memory/memory.c \
-              kernel/vfs/vfs.c \
-              kernel/process/task.c \
-              kernel/process/thread.c \
-              kernel/sync/sync.c \
-              kernel/protection/protect.c \
-              kernel/tests/tests.c
+              cli/cli.c \
+              finance/finance.c \
+              logbook/logbook.c \
+              memory/memory.c \
+              vfs/vfs.c \
+              process/task.c \
+              process/thread.c \
+              sync/sync.c \
+              protection/protect.c \
+              tests/tests.c
               
 OBJS = $(addprefix $(BUILD)/,$(ASM_SOURCES:.asm=.o) $(C_SOURCES:.c=.o))
 DEPS = $(OBJS:.o=.d)
