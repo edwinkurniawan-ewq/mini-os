@@ -31,6 +31,9 @@ static void update_cursor(void) {
 }
 
 static void vga_refresh(void) {
+    int max_offset = (row >= VGA_H) ? (row - VGA_H + 1) : 0;
+    int is_scrolled = (view_offset < max_offset);
+
     for (int r = 0; r < VGA_H; r++) {
         int hist_idx = view_offset + r;
         for (int c = 0; c < VGA_W; c++) {
@@ -41,6 +44,19 @@ static void vga_refresh(void) {
             }
         }
     }
+
+    if (is_scrolled) {
+        /* Indikator riwayat gulir sesuai referensi */
+        const char *badge = " RIWAYAT - gulir ke bawah / End ";
+        int b_len = 0;
+        while (badge[b_len]) b_len++;
+        int start_col = VGA_W - b_len - 1;
+        uint8_t badge_color = 0x4F; /* Latar Merah, Teks Putih */
+        for (int i = 0; i < b_len; i++) {
+            VGA[0 * VGA_W + (start_col + i)] = vga_entry(badge[i], badge_color);
+        }
+    }
+
     update_cursor();
 }
 
@@ -148,4 +164,15 @@ void vga_scroll_down(void) {
         if (view_offset > max_offset) view_offset = max_offset;
         vga_refresh();
     }
+}
+
+void vga_scroll_home(void) {
+    view_offset = 0;
+    vga_refresh();
+}
+
+void vga_scroll_end(void) {
+    int max_offset = (row >= VGA_H) ? (row - VGA_H + 1) : 0;
+    view_offset = max_offset;
+    vga_refresh();
 }

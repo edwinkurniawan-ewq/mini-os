@@ -2,6 +2,7 @@
 #define TASK_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 #define MAX_TASKS   16
 #define STACK_SIZE  4096
@@ -27,13 +28,15 @@ typedef struct {
 
 void  task_init(void);
 int   task_create(const char *name, void (*entry)(void));
-void  task_yield(void);        /* cooperative yield — calls schedule() */
-void  task_exit(void);         /* mark current TERMINATED, switch away */
-void  task_print_all(void);    /* CLI: list all threads & states */
-void  schedule(void);          /* Round Robin scheduler (cooperative) */
+void  task_yield(void);
+void  task_exit(void);
+void  schedule(void);
+void  task_print_all(void);
 
-extern tcb_t *current_task;
-extern tcb_t  task_table[MAX_TASKS];
-extern int    task_count;
+/* Fungsi tracking thread sesuai referensi foto */
+int   task_register_logger_start(void);
+void  task_register_logger_stop(int t_num);
+void  task_print_threads(void);
+void  task_run_laporan(void);
 
 #endif /* TASK_H */

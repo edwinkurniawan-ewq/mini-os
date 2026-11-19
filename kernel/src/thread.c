@@ -5,8 +5,22 @@ void vga_putc(char c); // <-- TAMBAHKAN BARIS INI
 
 #define MAX_THREADS 2
 
+typedef enum {
+    CPMK_THREAD_NEW = 0,
+    CPMK_THREAD_READY,
+    CPMK_THREAD_RUNNING,
+    CPMK_THREAD_WAITING,
+    CPMK_THREAD_TERMINATED
+} cpmk_state_t;
+
+typedef struct {
+    int id;
+    cpmk_state_t state;
+    void (*task)(void);
+} cpmk_thread_t;
+
 // Array struktur data thread
-tcb_t threads[MAX_THREADS];
+static cpmk_thread_t threads[MAX_THREADS];
 
 // Helper untuk mencetak status ke layar
 static void print_thread_state(int id, const char* state_name) {
@@ -32,12 +46,12 @@ static void task2(void) {
 void thread_init(void) {
     // Inisialisasi Thread 1 (Tugas: task1)
     threads[0].id = 0;
-    threads[0].state = THREAD_NEW;
+    threads[0].state = CPMK_THREAD_NEW;
     threads[0].task = task1;
 
     // Inisialisasi Thread 2 (Tugas: task2)
     threads[1].id = 1;
-    threads[1].state = THREAD_NEW;
+    threads[1].state = CPMK_THREAD_NEW;
     threads[1].task = task2;
 }
 
@@ -53,7 +67,7 @@ void run_thread_demo(void) {
 
     // 2. Tampilkan status READY (Dimasukkan ke antrean)
     for(int i = 0; i < MAX_THREADS; i++) {
-        threads[i].state = THREAD_READY;
+        threads[i].state = CPMK_THREAD_READY;
         print_thread_state(threads[i].id, "READY");
     }
     vga_puts("\n");
@@ -61,18 +75,18 @@ void run_thread_demo(void) {
     // 3. Eksekusi satu per satu
     for(int i = 0; i < MAX_THREADS; i++) {
         // Alihkan ke RUNNING
-        threads[i].state = THREAD_RUNNING;
+        threads[i].state = CPMK_THREAD_RUNNING;
         print_thread_state(threads[i].id, "RUNNING");
         
         // Eksekusi fungsi tugas thread
         threads[i].task();
 
         // Alihkan ke WAITING (Simulasi I/O)
-        threads[i].state = THREAD_WAITING;
+        threads[i].state = CPMK_THREAD_WAITING;
         print_thread_state(threads[i].id, "WAITING (Menunggu I/O selesai)");
 
         // Alihkan ke TERMINATED (Selesai)
-        threads[i].state = THREAD_TERMINATED;
+        threads[i].state = CPMK_THREAD_TERMINATED;
         print_thread_state(threads[i].id, "TERMINATED");
         vga_puts("\n");
     }

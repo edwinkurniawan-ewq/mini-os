@@ -26,6 +26,8 @@ C_SOURCES   = drivers/vga.c \
               kernel/src/task.c \
               kernel/src/sync.c \
               kernel/src/protect.c \
+              kernel/src/vfs.c \
+              kernel/src/logbook.c \
               kernel/src/tests.c
               
 OBJS = $(ASM_SOURCES:.asm=.o) $(C_SOURCES:.c=.o)
@@ -47,7 +49,13 @@ $(TARGET_ELF): $(TARGET_PE)
 run: $(TARGET_ELF)
 	$(QEMU) -kernel $(TARGET_ELF)
 
+ifeq ($(OS),Windows_NT)
+    CLEAN_CMD = cmd /c "del /q /f $(subst /,\,$(OBJS)) $(TARGET_PE) $(TARGET_ELF) 2>nul || exit 0"
+else
+    CLEAN_CMD = rm -f $(OBJS) $(TARGET_PE) $(TARGET_ELF)
+endif
+
 clean:
-	rm -f $(OBJS) $(TARGET_PE) $(TARGET_ELF)
+	-$(CLEAN_CMD)
 
 .PHONY: all run clean

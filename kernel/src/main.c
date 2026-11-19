@@ -1,5 +1,11 @@
-#include "thread.h"
+#include "kernel.h"
 #include "vga.h"
+#include "finance.h"
+#include "protect.h"
+#include "logbook.h"
+#include "vfs.h"
+#include "task.h"
+#include "thread.h"
 
 void cli_init(void);
 void cli_run(void);
@@ -9,15 +15,11 @@ void keyboard_init(void);
 void memory_init(void);
 void thread_init(void);
 void timer_init(void);
-void vfs_init(void);
 void sync_init(void);
-void protect_init(void);
-void task_init(void);
 
 void kernel_main(void) {
     vga_set_color(0x0F);
     vga_clear();
-    vga_puts("KERNEL HIDUP\n");
 
     gdt_init();
     idt_init();
@@ -25,17 +27,15 @@ void kernel_main(void) {
     timer_init();
     keyboard_init();
     
-    // Inisialisasi CPMK 2 & 5 (Fitur milik Edwin)
+    // Inisialisasi thread, task, sync, protect, vfs, logbook, finance
     thread_init(); 
-    
-    // Inisialisasi CPMK 3 (Fitur buatan Rasya & Andika)
     task_init();
     sync_init();
     protect_init();
-    
     vfs_init();
+    logbook_init();
+    finance_init();
 
-    vga_puts("INIT SELESAI\n");
     cli_init();
     cli_run();
 

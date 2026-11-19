@@ -95,7 +95,7 @@ char keyboard_getchar(void) {
         /* Jika bukan mouse, berarti data dari Keyboard */
         mouse_cycle = 0;
 
-        /* Deteksi Extended Key (0xE0) untuk Page Up / Page Down */
+        /* Deteksi Extended Key (0xE0) untuk Page Up / Page Down / Home / End */
         if (data == 0xE0) {
             while (!(inb(0x64) & 1)) { }
             uint8_t ext = inb(0x60);
@@ -103,6 +103,10 @@ char keyboard_getchar(void) {
                 vga_scroll_up();
             } else if (ext == 0x51) { /* Page Down */
                 vga_scroll_down();
+            } else if (ext == 0x47) { /* Home */
+                vga_scroll_home();
+            } else if (ext == 0x4F) { /* End */
+                vga_scroll_end();
             }
             continue;
         }
