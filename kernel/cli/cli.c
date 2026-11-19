@@ -38,7 +38,11 @@ static void print_menu_user(void) {
     vga_puts("  echo <teks> - cetak teks\n");
     vga_puts("  reboot      - restart sistem\n");
     vga_puts("  thread      - uji coba siklus thread (CPMK 2)\n");
-    vga_puts("  deadlock    - uji coba mutex & deadlock (CPMK 5)\n");
+    vga_puts("  sync        - uji mutex (aman dari race condition)\n");
+    vga_puts("  race        - uji race condition (tanpa mutex)\n");
+    vga_puts("  semaphore   - uji counting semaphore (producer/consumer)\n");
+    vga_puts("  deadlock    - uji deadlock + deteksi + pencegahan\n");
+    vga_puts("  protect     - uji proteksi hak akses\n");
 }
 
 static void print_menu_kernel(void) {
@@ -209,10 +213,24 @@ static void run_command(const char *cmd) {
         system_reboot();
     } else if (streq(cmd, "thread")) {
         run_thread_demo();
+    } else if (streq(cmd, "sync")) {
+        test_sync();
+    } else if (streq(cmd, "race")) {
+        test_race();
+    } else if (streq(cmd, "semaphore")) {
+        test_semaphore();
     } else if (streq(cmd, "deadlock")) {
-        run_deadlock_demo();
-    } else if (streq(cmd, "memtest") || streq(cmd, "vfs") || streq(cmd, "vfstest") || streq(cmd, "protect") || streq(cmd, "race") || streq(cmd, "sched")) {
+        test_deadlock();
+    } else if (streq(cmd, "deadlock-sim")) {
+        test_deadlock_sim();
+    } else if (streq(cmd, "protect")) {
+        test_protect();
+    } else if (streq(cmd, "sched")) {
+        test_sched();
+    } else if (streq(cmd, "memtest")) {
         test_malloc();
+    } else if (streq(cmd, "vfs") || streq(cmd, "vfstest")) {
+        test_vfs();
     } else {
         vga_set_color(0x0C);
         vga_puts("Perintah tidak dikenal: ");

@@ -81,35 +81,54 @@ make clean
 
 ```text
 mini-os/
-├── boot/
-│   ├── boot.asm        # Assembly entry point & bootloader
-│   └── linker.ld       # Linker script untuk penataan memori kernel
-├── drivers/
-│   ├── keyboard.c      # Driver pembaca scancode keyboard
-│   ├── serial.c        # Output serial UART untuk debugging
-│   └── vga.c           # Driver VGA Text Mode (80x25 display)
-├── kernel/
-│   ├── include/        # Berkas Header (.h)
-│   │   ├── cli.h       # Antarmuka Shell / CLI
-│   │   ├── kernel.h    # Definisi umum kernel
-│   │   ├── memory.h    # Memori alokator
-│   │   ├── protect.h   # Proteksi & Hak Akses
-│   │   ├── sync.h      # Mutex & Semaphore
-│   │   ├── task.h      # TCB & Scheduler
-│   │   ├── vga.h       # Header layar VGA
-│   │   └── vfs.h       # Virtual File System
-│   └── src/            # Implementasi Kode C (.c) & Assembly (.asm)
-│       ├── cli.c       # Parser & logika perintah CLI
-│       ├── main.c      # Entry-point kernel & registrasi modul
-│       ├── memory.c    # Dynamic Memory Allocator (malloc/free)
-│       ├── protect.c   # Skenario proteksi memori / user mode
-│       ├── stubs.c     # Stub fungsi bawaan
-│       ├── switch.asm  # Context switching Assembly
-│       ├── sync.c      # Sinkronisasi & mitigasi deadlock
-│       ├── task.c      # Thread manager & Round Robin scheduler
-│       ├── tests.c     # Pengujian (race condition, deadlock, vfs)
-│       └── vfs.c       # RAMDisk Virtual File System
-└── Makefile            # Automated Build System
+├── boot/                # Tahap boot & linker
+│   ├── boot.asm         # Assembly entry point & bootloader
+│   └── linker.ld        # Linker script untuk penataan memori kernel
+├── drivers/             # Driver hardware
+│   ├── keyboard.c       # Driver pembaca scancode keyboard
+│   ├── timer.c          # Programmable Interval Timer (PIT)
+│   └── vga.c            # Driver VGA Text Mode (80x25 display)
+├── kernel/              # Sumber kernel, dikelompokkan per modul
+│   ├── include/         # Semua header (.h) dalam satu tempat
+│   │   ├── cli.h        # Antarmuka Shell / CLI
+│   │   ├── finance.h    # Aplikasi pencatat keuangan
+│   │   ├── io.h         # Helper akses port I/O
+│   │   ├── kernel.h     # Definisi umum kernel
+│   │   ├── keyboard.h   # Antarmuka driver keyboard
+│   │   ├── logbook.h    # Buku log aktivitas
+│   │   ├── memory.h     # Memori alokator
+│   │   ├── protect.h    # Proteksi & Hak Akses
+│   │   ├── sync.h       # Mutex & Semaphore
+│   │   ├── task.h       # TCB & Scheduler
+│   │   ├── tests.h      # Test harness
+│   │   ├── thread.h     # Thread lifecycle
+│   │   ├── timer.h      # Timer PIT
+│   │   ├── vfs.h        # Virtual File System
+│   │   └── vga.h        # Header layar VGA
+│   ├── main.c           # Entry-point kernel & registrasi modul
+│   ├── stubs.c          # Stub fungsi bawaan
+│   ├── cli/             # Modul CLI / shell
+│   │   └── cli.c        # Parser & logika perintah CLI
+│   ├── finance/         # Modul aplikasi kas
+│   │   └── finance.c    # CRUD transaksi keuangan
+│   ├── logbook/         # Modul buku log
+│   │   └── logbook.c    # Pencatatan aktivitas ke RAMDisk
+│   ├── memory/          # Modul alokator memori dinamis
+│   │   └── memory.c     # Dynamic Memory Allocator (malloc/free)
+│   ├── process/         # Modul proses: TCB, scheduler, thread
+│   │   ├── switch.asm   # Context switching Assembly
+│   │   ├── task.c       # TCB, Round Robin scheduler, primitif blocking
+│   │   └── thread.c     # Demo siklus thread (CPMK 2)
+│   ├── protection/      # Modul proteksi hak akses
+│   │   └── protect.c    # Mode USER/KERNEL, izin per fitur, audit log
+│   ├── sync/            # Modul sinkronisasi
+│   │   └── sync.c       # Mutex (blocking) + Semaphore + deteksi deadlock
+│   ├── tests/           # Modul pengujian (test harness)
+│   │   └── tests.c      # race condition, deadlock, semaphore, proteksi
+│   └── vfs/             # Modul VFS RAMDisk
+│       └── vfs.c        # Virtual File System berbasis RAMDisk
+├── build/               # Hasil build (.o, .d, kernel.bin) — diabaikan Git
+└── Makefile             # Automated Build System
 ```
 
 ---
@@ -118,9 +137,9 @@ mini-os/
 
 | Anggota Tim | Peran / Fokus Utama | Modul / File yang Dikerjakan |
 | :--- | :--- | :--- |
-| **Edwin** *(PIC 1)* | **Low-Level Core, Hardware Driver, CLI Kernel & Build System** | `boot/*`, `drivers/*`, `kernel/src/cli.c`, `kernel/src/main.c`, `kernel/src/stubs.c`, `Makefile`, `cli.h`, `kernel.h`, `vga.h` |
-| **Rasya** *(PIC 2)* | **Concurrency Engine (Thread, Scheduler CPU, Sinkronisasi, Deadlock & Proteksi)** | `arch/switch.asm`, `drivers/timer.c`, `kernel/src/task.c`, `kernel/src/sync.c`, `kernel/src/protect.c`, `kernel/src/tests.c`, `task.h`, `sync.h`, `protect.h` |
-| **Andika** *(PIC 3)* | **Manajemen Memori Dinamis & Virtual File System (VFS)** | `kernel/src/memory.c`, `kernel/src/vfs.c`, `memory.h`, `vfs.h` |
+| **Edwin** *(PIC 1)* | **Low-Level Core, Hardware Driver, CLI Kernel & Build System** | `boot/*`, `drivers/*`, `kernel/main.c`, `kernel/stubs.c`, `kernel/cli/*`, `kernel/finance/*`, `kernel/logbook/*`, `Makefile`, `cli.h`, `kernel.h`, `vga.h` |
+| **Rasya** *(PIC 2)* | **Concurrency Engine (Thread, Scheduler CPU, Sinkronisasi, Deadlock & Proteksi)** | `kernel/process/switch.asm`, `kernel/process/task.c`, `kernel/sync/sync.c`, `kernel/protection/protect.c`, `kernel/tests/tests.c`, `drivers/timer.c`, `task.h`, `sync.h`, `protect.h`, `tests.h` |
+| **Andika** *(PIC 3)* | **Manajemen Memori Dinamis & Virtual File System (VFS)** | `kernel/memory/memory.c`, `kernel/vfs/vfs.c`, `memory.h`, `vfs.h` |
 
 ---
 
@@ -138,8 +157,10 @@ mini-os/
 
 ### 🔵 Minggu 3: Concurrency, CRUD VFS, Sinkronisasi & Proteksi
 * **Edwin:** Konsolidasi rutin `init` semua modul ke `main.c` dan *parsing* argumen CLI untuk memanggil fungsi pengujian.
-* **Rasya:** Implementasi *Mutex*, *Semaphore*, *test-harness* untuk *race condition* & *deadlock*, serta skema proteksi hak akses (`protect.c`).
+* **Rasya:** ✅ *Mutex* blocking (ownership + handoff + `trylock`), *counting semaphore* (blocking wait/signal), primitif blocking task (`task_block_on`/`task_wake`), *test-harness* untuk *race condition* & *deadlock* (deteksi wait-for graph + pencegahan via resource ordering & backoff), serta skema proteksi hak akses (`protect.c`: mode USER/KERNEL, izin per fitur, audit log penolakan, critical section).
 * **Andika:** Antarmuka CRUD (Create, Read, Update, Delete) berkas teks pada VFS & uji alokasi dinamis pada *payload* berkas.
+
+**Perintah uji baru (PIC 2):** `sync` (mutex aman), `race` (race condition), `semaphore` (producer/consumer), `deadlock` (deteksi + pencegahan), `deadlock-sim` (simulasi lama), `protect` (proteksi hak akses).
 
 ### 🟢 Minggu 4: Integrasi Final, Pengujian QEMU, & Penyusunan Laporan
 * **Seluruh Anggota:**
@@ -151,6 +172,7 @@ mini-os/
 
 ## 📜 Aturan Kolaborasi Kode
 
-1. **File Integrator (`kernel/src/main.c`, `Makefile`):** Dikelola penuh oleh **Edwin**. Anggota lain hanya perlu menyediakan fungsi *initialization* modul masing-masing (misal: `memory_init()`, `task_init()`, `vfs_init()`).
+1. **File Integrator (`kernel/main.c`, `Makefile`):** Dikelola penuh oleh **Edwin**. Anggota lain hanya perlu menyediakan fungsi *initialization* modul masing-masing (misal: `memory_init()`, `task_init()`, `vfs_init()`).
 2. **Header Files (`kernel/include/*.h`):** Setiap anggota memegang hak milik penuh atas header modulnya untuk mencegah terjadi *merge conflict* pada Git.
-3. **Modul Pengujian (`kernel/src/tests.c`):** Rutin pengujian yang dibuat oleh Rasya & Andika diekspos ke CLI agar bisa dipanggil melalui perintah konsol/shell.
+3. **Modul Pengujian (`kernel/tests/tests.c`):** Rutin pengujian yang dibuat oleh Rasya & Andika diekspos ke CLI agar bisa dipanggil melalui perintah konsol/shell.
+4. **Satu Folder per Modul:** sumber di `kernel/<modul>/` (misal `kernel/sync/`, `kernel/process/`), artefak build di `build/` (diabaikan Git).

@@ -1,5 +1,6 @@
 #include "task.h"
 #include "kernel.h"
+#include "vga.h"
 #include "memory.h"
 #include "finance.h"
 
@@ -13,26 +14,6 @@ static void k_strcpy(char *dst, const char *src, int max) {
     int i = 0;
     while (i < max - 1 && src[i]) { dst[i] = src[i]; i++; }
     dst[i] = '\0';
-}
-
-static void print_num(int num) {
-    if (num == 0) {
-        vga_puts("0");
-        return;
-    }
-    if (num < 0) {
-        vga_putc('-');
-        num = -num;
-    }
-    char buf[16];
-    int i = 0;
-    while (num > 0) {
-        buf[i++] = (num % 10) + '0';
-        num /= 10;
-    }
-    while (i > 0) {
-        vga_putc(buf[--i]);
-    }
 }
 
 /* ---- context switch (asm) ---------------------------------------------- */
@@ -91,6 +72,8 @@ void task_init(void) {
         task_table[i].esp     = 0;
         task_table[i].ebp     = 0;
         task_table[i].eip     = 0;
+        task_table[i].wait_res  = NULL;
+        task_table[i].wait_kind = WAIT_NONE;
     }
 
     task_table[0].state = TASK_RUNNING;
@@ -108,6 +91,8 @@ int task_create(const char *name, void (*entry)(void)) {
     tcb_t *t = &task_table[task_count];
     t->id    = task_count++;
     t->state = TASK_NEW;
+    t->wait_res  = NULL;
+    t->wait_kind = WAIT_NONE;
     k_strcpy(t->name, name, sizeof(t->name));
 
     uint32_t *sp = (uint32_t *)(t->stack + STACK_SIZE);
@@ -137,6 +122,74 @@ void task_exit(void) {
     for (;;) { __asm__ volatile ("hlt"); }
 }
 
+/* ---- primitif blocking (Minggu 3) --------------------------------------- */
+
+int task_current_id(void) {
+    return current_task ? current_task->id : 0;
+}
+
+void task_block_on(void *res, wait_kind_t kind) {
+    if (!current_task) return;
+    current_task->wait_res  = res;
+    current_task->wait_kind = kind;
+    current_task->state      = TASK_WAITING;
+    schedule();      /* yield; task dilanjutkan lagi setelah di-wake */
+}
+
+void task_wake(int id) {
+    if (id <= 0 || id >= task_count) return;
+    tcb_t *t = &task_table[id];
+    if (t->state == TASK_WAITING) {
+        t->state      = TASK_READY;
+        t->wait_res   = NULL;
+        t->wait_kind  = WAIT_NONE;
+    }
+}
+
+int task_ready_count(void) {
+    int n = 0;
+    for (int i = 1; i < task_count; i++) {
+        if (task_table[i].state == TASK_READY) n++;
+    }
+    return n;
+}
+
+int task_waiting_count(void) {
+    int n = 0;
+    for (int i = 1; i < task_count; i++) {
+        if (task_table[i].state == TASK_WAITING) n++;
+    }
+    return n;
+}
+
+int task_run_until_blocked(void) {
+    while (task_ready_count() > 0) {
+        schedule();
+    }
+    return task_waiting_count();
+}
+
+void task_reset(void) {
+    for (int i = 1; i < task_count; i++) {
+        task_table[i].state      = TASK_TERMINATED;
+        task_table[i].wait_res   = NULL;
+        task_table[i].wait_kind  = WAIT_NONE;
+        task_table[i].name[0]    = '\0';
+    }
+    task_count            = 1;
+    task_table[0].state   = TASK_RUNNING;
+    current_task          = &task_table[0];
+}
+
+int task_total(void) {
+    return task_count;
+}
+
+tcb_t *task_get(int id) {
+    if (id < 0 || id >= task_count) return NULL;
+    return &task_table[id];
+}
+
 void task_print_all(void) {
     vga_set_color(0x0C);
     vga_puts("ID  NAME             STATE\n");
@@ -144,7 +197,7 @@ void task_print_all(void) {
     vga_set_color(0x0F);
     for (int i = 0; i < task_count; i++) {
         tcb_t *t = &task_table[i];
-        print_num(t->id);
+        vga_put_int(t->id);
         vga_puts("   ");
         vga_puts(t->name);
         int pad = 16;
@@ -210,7 +263,7 @@ void task_print_threads(void) {
 
     for (int i = 0; i < reg_count; i++) {
         vga_puts("T");
-        print_num(reg_list[i].t_num);
+        vga_put_int(reg_list[i].t_num);
         vga_puts("   ");
 
         vga_puts(reg_list[i].name);
@@ -251,51 +304,51 @@ void task_run_laporan(void) {
     vga_set_color(0x0C);
     vga_puts("=== LAPORAN KAS (2 kernel thread) ===\n");
 
-    vga_puts("[T"); print_num(t_data); vga_puts(" Data] NEW\n");
-    vga_puts("[T"); print_num(t_data); vga_puts(" Data] NEW -> READY\n");
-    vga_puts("[T"); print_num(t_mon);  vga_puts(" Monitor] NEW\n");
-    vga_puts("[T"); print_num(t_mon);  vga_puts(" Monitor] NEW -> READY\n");
+    vga_puts("[T"); vga_put_int(t_data); vga_puts(" Data] NEW\n");
+    vga_puts("[T"); vga_put_int(t_data); vga_puts(" Data] NEW -> READY\n");
+    vga_puts("[T"); vga_put_int(t_mon);  vga_puts(" Monitor] NEW\n");
+    vga_puts("[T"); vga_put_int(t_mon);  vga_puts(" Monitor] NEW -> READY\n");
 
-    vga_puts("[T"); print_num(t_data); vga_puts(" Data] READY -> RUNNING\n");
+    vga_puts("[T"); vga_put_int(t_data); vga_puts(" Data] READY -> RUNNING\n");
     vga_set_color(0x0F);
     vga_puts("[Data] membaca dan menghitung 'kas.dat' dari RAMDisk...\n");
     vga_set_color(0x0C);
 
-    vga_puts("[T"); print_num(t_data); vga_puts(" Data] RUNNING -> WAITING\n");
-    vga_puts("[T"); print_num(t_mon);  vga_puts(" Monitor] READY -> RUNNING\n");
+    vga_puts("[T"); vga_put_int(t_data); vga_puts(" Data] RUNNING -> WAITING\n");
+    vga_puts("[T"); vga_put_int(t_mon);  vga_puts(" Monitor] READY -> RUNNING\n");
     vga_set_color(0x0F);
     vga_puts("[Monitor] cek ke-1: transaksi ");
-    print_num(count);
+    vga_put_int(count);
     vga_puts("/20, heap terpakai ");
-    print_num((int)heap_used);
+    vga_put_int((int)heap_used);
     vga_puts(" B\n");
     vga_set_color(0x0C);
 
-    vga_puts("[T"); print_num(t_mon);  vga_puts(" Monitor] RUNNING -> READY\n");
-    vga_puts("[T"); print_num(t_mon);  vga_puts(" Monitor] READY -> RUNNING\n");
+    vga_puts("[T"); vga_put_int(t_mon);  vga_puts(" Monitor] RUNNING -> READY\n");
+    vga_puts("[T"); vga_put_int(t_mon);  vga_puts(" Monitor] READY -> RUNNING\n");
     vga_set_color(0x0F);
     vga_puts("[Monitor] cek ke-2: transaksi ");
-    print_num(count);
+    vga_put_int(count);
     vga_puts("/20, heap terpakai ");
-    print_num((int)heap_used);
+    vga_put_int((int)heap_used);
     vga_puts(" B\n");
     vga_set_color(0x0C);
 
-    vga_puts("[T"); print_num(t_mon);  vga_puts(" Monitor] RUNNING -> READY\n");
-    vga_puts("[T"); print_num(t_data); vga_puts(" Data] WAITING -> READY\n");
-    vga_puts("[T"); print_num(t_mon);  vga_puts(" Monitor] READY -> RUNNING\n");
-    vga_puts("[T"); print_num(t_mon);  vga_puts(" Monitor] RUNNING -> TERMINATED\n");
+    vga_puts("[T"); vga_put_int(t_mon);  vga_puts(" Monitor] RUNNING -> READY\n");
+    vga_puts("[T"); vga_put_int(t_data); vga_puts(" Data] WAITING -> READY\n");
+    vga_puts("[T"); vga_put_int(t_mon);  vga_puts(" Monitor] READY -> RUNNING\n");
+    vga_puts("[T"); vga_put_int(t_mon);  vga_puts(" Monitor] RUNNING -> TERMINATED\n");
 
-    vga_puts("[T"); print_num(t_data); vga_puts(" Data] READY -> RUNNING\n");
+    vga_puts("[T"); vga_put_int(t_data); vga_puts(" Data] READY -> RUNNING\n");
     vga_set_color(0x0F);
     vga_puts("[Data] Ditemukan ");
-    print_num(count);
+    vga_put_int(count);
     vga_puts(" transaksi di RAMDisk, total saldo Rp");
-    print_num(saldo);
+    vga_put_int(saldo);
     vga_puts(".\n");
     vga_set_color(0x0C);
 
-    vga_puts("[T"); print_num(t_data); vga_puts(" Data] RUNNING -> TERMINATED\n");
+    vga_puts("[T"); vga_put_int(t_data); vga_puts(" Data] RUNNING -> TERMINATED\n");
     vga_puts("=== LAPORAN SELESAI ===\n");
     vga_set_color(0x0F);
 }

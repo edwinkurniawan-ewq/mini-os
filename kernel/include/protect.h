@@ -22,6 +22,17 @@ void protect_set_mode(os_mode_t mode);
 /* Mengembalikan 1 jika diizinkan, 0 jika ditolak */
 int protect_check_perm(perm_type_t perm);
 
+/* Cek izin + catat penolakan ke audit log; 1 = boleh, 0 = ditolak */
+int  protect_require(perm_type_t perm, const char *action);
+
+/* Melindungi bagian kritis (interupsi dimatikan selama section) */
+void protect_enter_critical(void);
+void protect_exit_critical(void);
+
+/* Audit log penolakan akses */
+void protect_print_audit(void);
+int  protect_denied_count(void);
+
 /* Mengatur izin: "tambah", "lihat", "transaksi", "ubah", "hapus", "simpan" */
 int protect_set_perm_by_name(const char *name, int enable);
 

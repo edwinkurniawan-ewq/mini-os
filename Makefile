@@ -4,33 +4,37 @@ LD      = ld
 OBJCOPY = objcopy
 QEMU    = qemu-system-i386
 
-CFLAGS  = -m32 -ffreestanding -fno-stack-protector -fno-builtin -Wall -Wextra -Ikernel/include -pipe
+# Semua artefak build (object, dependensi, kernel) dikumpulkan di build/
+BUILD   = build
+
+CFLAGS  = -m32 -ffreestanding -fno-stack-protector -fno-builtin -Wall -Wextra -Ikernel/include -pipe -MMD -MP
 ASFLAGS = -f win32
 LDFLAGS = -m i386pe --image-base 0x100000 -T boot/linker.ld
 
-TARGET_PE  = kernel.exe
-TARGET_ELF = kernel.bin
+TARGET_PE  = $(BUILD)/kernel.exe
+TARGET_ELF = $(BUILD)/kernel.bin
 
 ASM_SOURCES = boot/boot.asm \
-              kernel/src/switch.asm
+              kernel/process/switch.asm
 
 C_SOURCES   = drivers/vga.c \
               drivers/keyboard.c \
               drivers/timer.c \
-              kernel/src/cli.c \
-              kernel/src/finance.c \
-              kernel/src/main.c \
-              kernel/src/memory.c \
-              kernel/src/stubs.c \
-              kernel/src/thread.c \
-              kernel/src/task.c \
-              kernel/src/sync.c \
-              kernel/src/protect.c \
-              kernel/src/vfs.c \
-              kernel/src/logbook.c \
-              kernel/src/tests.c
+              kernel/main.c \
+              kernel/stubs.c \
+              kernel/cli/cli.c \
+              kernel/finance/finance.c \
+              kernel/logbook/logbook.c \
+              kernel/memory/memory.c \
+              kernel/vfs/vfs.c \
+              kernel/process/task.c \
+              kernel/process/thread.c \
+              kernel/sync/sync.c \
+              kernel/protection/protect.c \
+              kernel/tests/tests.c
               
-OBJS = $(ASM_SOURCES:.asm=.o) $(C_SOURCES:.c=.o)
+OBJS = $(addprefix $(BUILD)/,$(ASM_SOURCES:.asm=.o) $(C_SOURCES:.c=.o))
+DEPS = $(OBJS:.o=.d)
 
 all: $(TARGET_ELF)
 
@@ -40,22 +44,20 @@ $(TARGET_PE): $(OBJS)
 $(TARGET_ELF): $(TARGET_PE)
 	$(OBJCOPY) -O elf32-i386 $< $@
 
-%.o: %.c
+$(BUILD)/%.o: %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.o: %.asm
+$(BUILD)/%.o: %.asm
+	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
 run: $(TARGET_ELF)
 	$(QEMU) -kernel $(TARGET_ELF)
 
-ifeq ($(OS),Windows_NT)
-    CLEAN_CMD = cmd /c "del /q /f $(subst /,\,$(OBJS)) $(TARGET_PE) $(TARGET_ELF) 2>nul || exit 0"
-else
-    CLEAN_CMD = rm -f $(OBJS) $(TARGET_PE) $(TARGET_ELF)
-endif
-
 clean:
-	-$(CLEAN_CMD)
+	rm -rf $(BUILD)
+
+-include $(DEPS)
 
 .PHONY: all run clean

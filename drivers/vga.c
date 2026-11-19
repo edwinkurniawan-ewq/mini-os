@@ -128,6 +128,27 @@ void vga_putc(char c) {
     update_cursor();
 }
 
+void vga_put_int(int value) {
+    char buf[12];
+    int i = 0;
+
+    if (value < 0) {
+        vga_putc('-');
+        value = -value;
+    }
+    if (value == 0) {
+        vga_putc('0');
+        return;
+    }
+    while (value > 0) {
+        buf[i++] = (char)('0' + (value % 10));
+        value /= 10;
+    }
+    while (i > 0) {
+        vga_putc(buf[--i]);
+    }
+}
+
 void vga_puts(const char *s) {
     for (; *s; s++) put_char(*s);
     update_cursor();
