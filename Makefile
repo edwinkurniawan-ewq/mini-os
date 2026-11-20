@@ -7,7 +7,9 @@ QEMU    = qemu-system-i386
 # Semua artefak build (object, dependensi, kernel) dikumpulkan di build/
 BUILD   = build
 
-CFLAGS  = -m32 -ffreestanding -fno-stack-protector -fno-builtin -Wall -Wextra -Ikernel/include -pipe -MMD -MP
+# -mno-sse/-mno-mmx: kernel belum mengaktifkan SSE (CR4.OSFXSR), jadi compiler dilarang
+# memakai register xmm/mm (mis. untuk menyalin struct). Tanpa ini CPU crash (#UD -> reboot).
+CFLAGS  = -m32 -ffreestanding -fno-stack-protector -fno-builtin -Wall -Wextra -Ikernel/include -pipe -MMD -MP -mno-sse -mno-mmx
 ASFLAGS = -f win32
 LDFLAGS = -m i386pe --image-base 0x100000 -T boot/linker.ld
 
