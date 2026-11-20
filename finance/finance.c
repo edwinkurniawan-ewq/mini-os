@@ -105,6 +105,7 @@ static int parse_nominal_smart(const char *str, char *out_tipe) {
 
     while (*str) {
         if (*str >= '0' && *str <= '9') {
+            if (res > 99999999) return 0;   /* cegah overflow int (maks 999.999.999) */
             res = res * 10 + (*str - '0');
             found_digit = 1;
         } else if (*str == '.' || *str == ',' || *str == ' ') {
@@ -281,22 +282,34 @@ static void do_tambah(void) {
         f_strcpy(in_ket, "Kas", sizeof(in_ket));
     }
 
-    /* 2. Input Nominal */
+    /* 2. Input Nominal: diulang sampai valid, Enter kosong = batal.
+     *    (Dulu input yang tidak terbaca langsung membuang kita ke menu kas.) */
     char detected_tipe = '+';
-    vga_puts("Nominal (Rp) : ");
-    readline(in_nom, sizeof(in_nom));
-    int nominal = parse_nominal_smart(in_nom, &detected_tipe);
-    if (nominal <= 0) {
+    int nominal = 0;
+    for (;;) {
+        vga_puts("Nominal (Rp) : ");
+        readline(in_nom, sizeof(in_nom));
+        if (in_nom[0] == '\0') {
+            vga_set_color(0x0E);
+            vga_puts("[i] Dibatalkan: nominal kosong. Tidak ada transaksi yang dicatat.\n\n");
+            vga_set_color(0x0F);
+            return;
+        }
+        detected_tipe = '+';
+        nominal = parse_nominal_smart(in_nom, &detected_tipe);
+        if (nominal > 0) break;
+
         vga_set_color(0x0C);
-        vga_puts("[!] Nominal tidak valid (harus lebih dari 0)!\n\n");
+        vga_puts("[!] Nominal tidak valid. Yang terbaca: \"");
+        vga_puts(in_nom);
+        vga_puts("\"\n    Ketik angka saja, contoh 50000 (Enter kosong = batal).\n");
         vga_set_color(0x0F);
-        return;
     }
 
     /* 3. Input Jenis (Jika belum terdeteksi dari tanda +/-) */
     char tipe = detected_tipe;
     if (in_nom[0] != '+' && in_nom[0] != '-') {
-        vga_puts("Jenis [1=Pemasukan, 2=Pengeluaran] (default: 1) : ");
+        vga_puts("Jenis [1=Pemasukan, 2=Pengeluaran]  : ");
         readline(in_tipe, sizeof(in_tipe));
         if (in_tipe[0] == '2' || in_tipe[0] == '-') {
             tipe = '-';
@@ -313,18 +326,25 @@ static void do_tambah(void) {
     f_strcpy(buku_kas[idx].ket, in_ket, sizeof(buku_kas[idx].ket));
 
     /* Otomatis simpan data transaksi langsung ke RAMDisk */
-    finance_save_to_ramdisk();
+    int save_res = finance_save_to_ramdisk();
 
     /* Catat ke buku log */
     logbook_add("TAMBAH", buku_kas[idx].id, tipe, in_ket);
 
-    vga_set_color(0x0A);
-    vga_puts("[OK] Transaksi ID #");
-    print_int(buku_kas[idx].id);
-    vga_puts(" (");
-    vga_puts(tipe == '+' ? "Pemasukan Rp" : "Pengeluaran Rp");
-    print_int(nominal);
-    vga_puts(") berhasil dicatat & disimpan ke RAMDisk.\n\n");
+    if (save_res == 0) {
+        vga_set_color(0x0A);
+        vga_puts("[OK] Transaksi ID #");
+        print_int(buku_kas[idx].id);
+        vga_puts(" (");
+        vga_puts(tipe == '+' ? "Pemasukan Rp" : "Pengeluaran Rp");
+        print_int(nominal);
+        vga_puts(") berhasil dicatat & disimpan ke RAMDisk.\n\n");
+    } else {
+        vga_set_color(0x0C);
+        vga_puts("[!] Transaksi ID #");
+        print_int(buku_kas[idx].id);
+        vga_puts(" tercatat di memori, tetapi GAGAL disimpan ke RAMDisk.\n\n");
+    }
     vga_set_color(0x0F);
 }
 
