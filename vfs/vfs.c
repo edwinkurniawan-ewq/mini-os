@@ -136,3 +136,23 @@ void vfs_list(void) {
         vga_puts("(RAMDisk kosong)\n");
     }
 }
+
+size_t vfs_get_total_bytes(void) {
+    return (size_t)VFS_MAX_FILES * (size_t)VFS_FILE_SIZE;
+}
+
+size_t vfs_get_used_bytes(void) {
+    size_t used = 0;
+    for (int i = 0; i < VFS_MAX_FILES; i++) {
+        if (ramdisk_files[i].used) used += ramdisk_files[i].size;
+    }
+    return used;
+}
+
+int vfs_get_used_files(void) {
+    int count = 0;
+    for (int i = 0; i < VFS_MAX_FILES; i++) {
+        if (ramdisk_files[i].used) count++;
+    }
+    return count;
+}

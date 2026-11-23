@@ -24,6 +24,8 @@ C_SOURCES   = drivers/vga.c \
               drivers/timer.c \
               kernel/main.c \
               kernel/stubs.c \
+               kernel/rr.c \
+               kernel/monitor.c \
               cli/cli.c \
               finance/finance.c \
               logbook/logbook.c \
