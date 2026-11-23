@@ -23,4 +23,9 @@ size_t vfs_get_size(const char *name);
 int    vfs_delete(const char *name);
 void   vfs_list(void);
 
+/* Informasi kapasitas RAMDisk (dipakai monitor & pengujian). */
+size_t vfs_get_total_bytes(void);
+size_t vfs_get_used_bytes(void);
+int    vfs_get_used_files(void);
+
 #endif /* VFS_H */

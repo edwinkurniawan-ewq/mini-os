@@ -10,27 +10,42 @@ static int row = 0;          // Baris aktif di dalam history (0 .. MAX_HISTORY-1
 static int col = 0;          // Kolom aktif (0 .. 79)
 static int view_offset = 0;  // Baris teratas history yang sedang ditampilkan di layar
 static uint8_t color = 0x0F;
+static int monitor_active = 0; // 1 = widget monitor aktif, scroll dikunci
+static uint16_t widget_backup[VGA_WIDGET_ROWS][VGA_WIDGET_COLS];
 
 static uint16_t vga_entry(char c, uint8_t col_attr) {
     return ((uint16_t)col_attr << 8) | (uint8_t)c;
 }
 
 static void update_cursor(void) {
+    uint16_t pos;
+
+    // Saat overlay aktif kursor disembunyikan ke luar layar
+    if (monitor_active) {
+        pos = VGA_W * VGA_H;
+        outb(0x3D4, 0x0F); outb(0x3D5, pos & 0xFF);
+        outb(0x3D4, 0x0E); outb(0x3D5, (pos >> 8) & 0xFF);
+        return;
+    }
+
     // Kursor hanya tampil kalau posisi ketik aktif masuk di layar yang sedang dilihat
     if (row >= view_offset && row < view_offset + VGA_H) {
         int screen_row = row - view_offset;
-        uint16_t pos = screen_row * VGA_W + col;
+        pos = (uint16_t)(screen_row * VGA_W + col);
         outb(0x3D4, 0x0F); outb(0x3D5, pos & 0xFF);
         outb(0x3D4, 0x0E); outb(0x3D5, (pos >> 8) & 0xFF);
     } else {
         // Sembunyikan kursor ke luar layar kalau user sedang scroll ke atas
-        uint16_t pos = VGA_W * VGA_H;
+        pos = VGA_W * VGA_H;
         outb(0x3D4, 0x0F); outb(0x3D5, pos & 0xFF);
         outb(0x3D4, 0x0E); outb(0x3D5, (pos >> 8) & 0xFF);
     }
 }
 
 static void vga_refresh(void) {
+    /* Overlay monitor tidak boleh ditimpa oleh refresh history/scroll. */
+    if (monitor_active) return;
+
     int max_offset = (row >= VGA_H) ? (row - VGA_H + 1) : 0;
     int is_scrolled = (view_offset < max_offset);
 
@@ -101,7 +116,7 @@ static void put_char(char c) {
     }
 
     history[row][col] = vga_entry(c, color);
-    if (row >= view_offset && row < view_offset + VGA_H) {
+    if (!monitor_active && row >= view_offset && row < view_offset + VGA_H) {
         VGA[(row - view_offset) * VGA_W + col] = history[row][col];
     }
 
@@ -164,13 +179,14 @@ void vga_backspace(void) {
         return;
     }
     history[row][col] = vga_entry(' ', color);
-    if (row >= view_offset && row < view_offset + VGA_H) {
+    if (!monitor_active && row >= view_offset && row < view_offset + VGA_H) {
         VGA[(row - view_offset) * VGA_W + col] = history[row][col];
     }
     update_cursor();
 }
 
 void vga_scroll_up(void) {
+    if (monitor_active) return; /* jangan merusak overlay monitor */
     if (view_offset > 0) {
         view_offset -= 5;
         if (view_offset < 0) view_offset = 0;
@@ -179,6 +195,7 @@ void vga_scroll_up(void) {
 }
 
 void vga_scroll_down(void) {
+    if (monitor_active) return;
     int max_offset = (row >= VGA_H) ? (row - VGA_H + 1) : 0;
     if (view_offset < max_offset) {
         view_offset += 5;
@@ -188,12 +205,69 @@ void vga_scroll_down(void) {
 }
 
 void vga_scroll_home(void) {
+    if (monitor_active) return;
     view_offset = 0;
     vga_refresh();
 }
 
 void vga_scroll_end(void) {
+    if (monitor_active) return;
     int max_offset = (row >= VGA_H) ? (row - VGA_H + 1) : 0;
     view_offset = max_offset;
     vga_refresh();
+}
+
+/* ---- Widget kecil pojok kanan atas -------------------------------------- */
+
+void vga_widget_enter(void) {
+    if (monitor_active) return;
+
+    /* Simpan persis sel yang akan ditutup widget (termasuk atributnya). */
+    for (int r = 0; r < VGA_WIDGET_ROWS; r++) {
+        for (int c = 0; c < VGA_WIDGET_COLS; c++) {
+            widget_backup[r][c] = VGA[(VGA_WIDGET_ROW + r) * VGA_W +
+                                     (VGA_WIDGET_COL + c)];
+        }
+    }
+    monitor_active = 1;
+}
+
+void vga_widget_leave(void) {
+    if (!monitor_active) return;
+
+    for (int r = 0; r < VGA_WIDGET_ROWS; r++) {
+        for (int c = 0; c < VGA_WIDGET_COLS; c++) {
+            VGA[(VGA_WIDGET_ROW + r) * VGA_W +
+                (VGA_WIDGET_COL + c)] = widget_backup[r][c];
+        }
+    }
+    monitor_active = 0;
+    update_cursor();
+}
+
+void vga_widget_fill(int row, int col, int rows, int cols, uint8_t attr) {
+    if (!monitor_active) return;
+    uint16_t blank = vga_entry(' ', attr);
+
+    for (int r = 0; r < rows; r++) {
+        int sr = row + r;
+        if (sr < 0 || sr >= VGA_H) continue;
+        for (int c = 0; c < cols; c++) {
+            int sc = col + c;
+            if (sc < 0 || sc >= VGA_W) continue;
+            VGA[sr * VGA_W + sc] = blank;
+        }
+    }
+}
+
+void vga_widget_write(int row, int col, const char *text, uint8_t attr) {
+    if (!monitor_active || !text) return;
+    if (row < 0 || row >= VGA_H || col < 0 || col >= VGA_W) return;
+
+    int c = col;
+    while (*text && c < VGA_W) {
+        VGA[row * VGA_W + c] = vga_entry(*text, attr);
+        text++;
+        c++;
+    }
 }

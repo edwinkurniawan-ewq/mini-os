@@ -15,6 +15,8 @@
 #include "thread.h"
 #include "kernel.h"
 #include "vga.h"
+#include "memory.h"
+#include "vfs.h"
 
 #define TEST_ITER 5
 
@@ -309,12 +311,14 @@ void test_semaphore(void) {
 /* ===================== 5. UJI PROTEKSI HAK AKSES ===================== */
 
 void test_protect(void) {
+    os_mode_t saved_mode = protect_get_mode();
+
     vga_set_color(0x0C);
     vga_puts("\n=== UJI PROTEKSI HAK AKSES ===\n");
     vga_set_color(0x0F);
 
     vga_puts("Mode awal: ");
-    vga_puts(protect_get_mode() == MODE_KERNEL ? "KERNEL" : "USER");
+    vga_puts(saved_mode == MODE_KERNEL ? "KERNEL" : "USER");
     vga_puts("\nIzin awal:\n");
     protect_print_perms();
 
@@ -339,7 +343,7 @@ void test_protect(void) {
     vga_puts("Mode KERNEL: hapus = ");
     vga_puts(protect_check_perm(PERM_HAPUS) ? "diizinkan (privilege penuh)" : "ditolak");
     vga_puts("\n");
-    protect_set_mode(MODE_USER);
+    protect_set_mode(saved_mode);  /* kembalikan mode sesuai pemanggil */
 
     /* bagian kritis */
     protect_enter_critical();
@@ -372,9 +376,93 @@ void test_deadlock_sim(void) {
 }
 
 void test_malloc(void) {
-    vga_puts("[INFO] Modul alokator memori dinamis (kmalloc/kfree) sedang dalam pengerjaan oleh Andika (PIC 3).\n");
+    size_t total = memory_get_total();
+    size_t before = memory_get_used();
+    size_t during, after;
+    uint8_t *a = (uint8_t *)kmalloc(64);
+    uint8_t *b = (uint8_t *)kmalloc(128);
+    int ok = (a != NULL && b != NULL);
+
+    vga_set_color(0x0C);
+    vga_puts("\n=== UJI ALOKASI MEMORI (kmalloc/kfree) ===\n");
+    vga_set_color(0x0F);
+
+    if (a != NULL) {
+        for (int i = 0; i < 64; i++) a[i] = (uint8_t)(i & 0xFF);
+        for (int i = 0; i < 64; i++) {
+            if (a[i] != (uint8_t)(i & 0xFF)) ok = 0;
+        }
+    }
+    if (b != NULL) {
+        for (int i = 0; i < 128; i++) b[i] = (uint8_t)((i * 3) & 0xFF);
+        for (int i = 0; i < 128; i++) {
+            if (b[i] != (uint8_t)((i * 3) & 0xFF)) ok = 0;
+        }
+    }
+
+    during = memory_get_used();
+    kfree(a);
+    kfree(b);
+    after = memory_get_used();
+
+    vga_puts("  heap total : ");
+    vga_put_int((int)total);
+    vga_puts(" B | sebelum ");
+    vga_put_int((int)before);
+    vga_puts(" B | saat alokasi ");
+    vga_put_int((int)during);
+    vga_puts(" B | sesudah ");
+    vga_put_int((int)after);
+    vga_puts(" B\n");
+
+    if (ok && during > before && after == before) {
+        vga_set_color(0x0A);
+        vga_puts("  [LULUS] alokasi, penulisan, dan pembebasan memori benar\n");
+    } else {
+        vga_set_color(0x0C);
+        vga_puts("  [GAGAL] alokasi/kfree tidak konsisten\n");
+    }
+    vga_set_color(0x0F);
 }
 
 void test_vfs(void) {
-    vga_puts("[INFO] Modul Virtual File System (VFS RAMDisk) sedang dalam pengerjaan oleh Andika (PIC 3).\n");
+    char payload[16];
+    char hasil[16];
+    int ok;
+    int written, read_bytes;
+
+    for (int i = 0; i < 16; i++) payload[i] = (char)('A' + i);
+
+    vga_set_color(0x0C);
+    vga_puts("\n=== UJI VFS RAMDISK ===\n");
+    vga_set_color(0x0F);
+
+    written = vfs_write("diag.dat", payload, sizeof(payload));
+    read_bytes = vfs_read("diag.dat", hasil, sizeof(hasil));
+    ok = (written == 0 && read_bytes == (int)sizeof(payload));
+    for (int i = 0; ok && i < 16; i++) {
+        if (hasil[i] != payload[i]) ok = 0;
+    }
+
+    vga_puts("  write=");
+    vga_put_int(written);
+    vga_puts(" read=");
+    vga_put_int(read_bytes);
+    vga_puts(" byte | used=");
+    vga_put_int((int)vfs_get_used_bytes());
+    vga_puts("/");
+    vga_put_int((int)vfs_get_total_bytes());
+    vga_puts(" B | file=");
+    vga_put_int(vfs_get_used_files());
+    vga_puts("\n");
+
+    if (ok) {
+        vga_set_color(0x0A);
+        vga_puts("  [LULUS] data RAMDisk terbaca persis seperti yang ditulis\n");
+    } else {
+        vga_set_color(0x0C);
+        vga_puts("  [GAGAL] isi RAMDisk tidak cocok\n");
+    }
+    vga_set_color(0x0F);
+    vfs_delete("diag.dat");
 }

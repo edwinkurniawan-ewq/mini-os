@@ -1,5 +1,6 @@
 #include "kernel.h"
 #include "cli.h"
+#include "vga.h"
 #include "thread.h"
 #include "finance.h"
 #include "protect.h"
@@ -7,12 +8,20 @@
 #include "logbook.h"
 #include "io.h"
 #include "tests.h"
+#include "rr.h"
+#include "memory.h"
+#include "vfs.h"
+#include "timer.h"
+#include "monitor.h"
 
-void vga_putc(char c);
-void vga_backspace(void);
 char keyboard_getchar(void);
 
-#define CMD_MAX 64
+#define CMD_MAX      64
+#define PASSWORD_MAX 32
+#define MAX_ATTEMPTS 3
+#define KERNEL_PASS  "wowit123"   /* Ubah di sini untuk mengganti password */
+
+/* ---- helper tanpa libc --------------------------------------------------- */
 
 static int streq(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
@@ -26,37 +35,102 @@ static int starts_with(const char *str, const char *prefix) {
     return (*str == ' ' || *str == '\0');
 }
 
+/* Ambil bilangan desimal berikutnya, aman dari overflow 32-bit. */
+static int scan_uint(const char **cursor, uint32_t *out) {
+    const char *p = *cursor;
+    uint32_t value = 0;
+    int found = 0;
+
+    while (*p == ' ') p++;
+    while (*p >= '0' && *p <= '9') {
+        if (value > 10000000u) return 0;
+        value = value * 10u + (uint32_t)(*p - '0');
+        found = 1;
+        p++;
+    }
+    if (!found) return 0;
+
+    *out = value;
+    *cursor = p;
+    return 1;
+}
+
+static void read_line(char *buf, int maxlen) {
+    int len = 0;
+
+    for (;;) {
+        char c = keyboard_getchar();
+        if (c == '\n') {
+            vga_putc('\n');
+            break;
+        }
+        if (c == '\b') {
+            if (len > 0) {
+                len--;
+                vga_backspace();
+            }
+            continue;
+        }
+        if (c >= 32 && c < 127 && len < maxlen - 1) {
+            buf[len++] = c;
+            vga_putc(c);
+        }
+    }
+    buf[len] = '\0';
+}
+
+/* ---- menu --------------------------------------------------------------- */
+
 static void print_menu_user(void) {
-    vga_set_color(0x09); /* Biru terang sama seperti logo */
-    vga_puts("=== MENU UTAMA USER ===\n");
+    vga_set_color(0x09);
+    vga_puts("=== MENU UTAMA USER (wowit-os>) ===\n");
     vga_set_color(0x0F);
-    vga_puts("  help        - tampilkan bantuan ini\n");
-    vga_puts("  kas         - aplikasi pencatat keuangan\n");
-    vga_puts("  info        - informasi sistem\n");
-    vga_puts("  mode        - tampilkan mode; 'mode kernel' pindah ke mode KERNEL\n");
-    vga_puts("  clear       - bersihkan layar\n");
-    vga_puts("  echo <teks> - cetak teks\n");
-    vga_puts("  reboot      - restart sistem\n");
-    vga_puts("  thread      - uji coba siklus thread (CPMK 2)\n");
-    vga_puts("  sync        - uji mutex (aman dari race condition)\n");
-    vga_puts("  race        - uji race condition (tanpa mutex)\n");
-    vga_puts("  semaphore   - uji counting semaphore (producer/consumer)\n");
-    vga_puts("  deadlock    - uji deadlock + deteksi + pencegahan\n");
-    vga_puts("  protect     - uji proteksi hak akses\n");
+    vga_puts("  info   - identitas & spesifikasi dasar WOWIT OS\n");
+    vga_puts("  kas    - aplikasi pencatat keuangan (CRUD)\n");
+    vga_puts("  help   - tampilkan  perintah ini\n");
+    vga_puts("  exit   - shutdown / halt sistem\n");
 }
 
 static void print_menu_kernel(void) {
-    vga_set_color(0x0C);
-    vga_puts("=== MENU UTAMA KERNEL ===\n");
+    vga_set_color(0x0E);
+    vga_puts("=== MENU UTAMA KERNEL (wowit-kernel#) ===\n");
+
+    /* ---- perintah User Mode juga bisa langsung dipakai di sini ---- */
+    vga_set_color(0x0B);
+    vga_puts("=== PERINTAH USER MODE ===\n");
     vga_set_color(0x0F);
-    vga_puts("  help     - tampilkan bantuan ini\n");
-    vga_puts("  threads  - tampilkan daftar thread & status\n");
-    vga_puts("  log      - baca buku log aktivitas kas\n");
-    vga_puts("  laporan  - laporan kas oleh 2 thread\n");
-    vga_puts("  izin     - akses sistem kas on and off\n");
-    vga_puts("  exit     - kembali ke mode USER\n");
-    vga_puts("  (perintah Menu USER juga tetap bisa dipakai di mode ini)\n");
+    vga_puts("  info   - identitas & spesifikasi dasar WOWIT OS\n");
+    vga_puts("  kas    - aplikasi pencatat keuangan (CRUD)\n");
+    vga_puts("  help   - tampilkan daftar perintah mode ini\n");
+    vga_puts("  exit   - di Kernel: logout ke User | di User: shutdown\n");
+    vga_puts("  logout - kembali ke User Mode (wowit-os>)\n");
+
+    /* ---- perintah khusus kernel ---- */
+    vga_set_color(0x0E);
+    vga_puts("=== PERINTAH KERNEL MODE ===\n");
+    vga_set_color(0x0F);
+    vga_puts("  help         - daftar perintah kernel ini\n");
+    vga_puts("  thread       - uji siklus thread (CPMK 2)\n");
+    vga_puts("  deadlock     - uji mutex & deadlock + deteksi (CPMK 5)\n");
+    vga_puts("  deadlock-sim - simulasi deadlock dua kasir\n");
+    vga_puts("  sync         - uji mutex aman (tanpa lost update)\n");
+    vga_puts("  race         - uji race condition tanpa mutex\n");
+    vga_puts("  semaphore    - uji counting semaphore\n");
+    vga_puts("  sched        - uji penjadwalan / lifecycle thread\n");
+    vga_puts("  memtest      - uji alokasi memori kmalloc/kfree\n");
+    vga_puts("  vfs          - uji VFS RAMDisk\n");
+    vga_puts("  protect      - uji proteksi hak akses & audit log\n");
+    vga_puts("  threads      - daftar thread terdaftar\n");
+    vga_puts("  log          - buku log aktivitas kas\n");
+    vga_puts("  laporan      - laporan kas oleh 2 thread\n");
+    vga_puts("  izin         - lihat/atur izin: izin hapus off\n");
+    vga_puts("  quantum [n]  - lihat/ubah time quantum RR (1-1000 tick)\n");
+    vga_puts("  test-rr AB   - RR fleksibel: AB, A:150 B:80, AB 120\n");
+    vga_puts("  rr-sim       - simulasi cepat (4 task, burst 8 tick)\n");
+    vga_puts("  clear        - bersihkan layar | echo <teks> | reboot\n");
 }
+
+/* ---- aksi sistem -------------------------------------------------------- */
 
 static void system_reboot(void) {
     vga_puts("Merestart sistem...\n");
@@ -69,47 +143,141 @@ static void system_reboot(void) {
     __asm__ volatile ("int3");
 }
 
+static void system_halt(void) {
+    vga_set_color(0x0E);
+    vga_puts("\n=== SHUTDOWN WOWIT OS ===\n");
+    vga_puts("Sistem dihentikan (halt). Aman untuk mematikan mesin.\n");
+    vga_set_color(0x0F);
+    __asm__ volatile ("cli");
+    for (;;) {
+        __asm__ volatile ("hlt");
+    }
+}
+
 static void do_info(void) {
     vga_set_color(0x0E);
     vga_puts("\n=== INFORMASI WOWIT OS ===\n");
     vga_set_color(0x0F);
     vga_puts(" Nama Sistem  : WOWIT OS v1.0 (Bare-Metal x86 32-bit)\n");
+    vga_puts(" Prompt       : wowit-os> (USER) / wowit-kernel# (KERNEL)\n");
+    vga_set_color(0x0C);
     vga_puts(" Mode Saat Ini: ");
     if (protect_get_mode() == MODE_KERNEL) {
-        vga_set_color(0x0C); vga_puts("KERNEL (#)\n"); vga_set_color(0x0F);
+        vga_puts("KERNEL (#)\n");
     } else {
-        vga_set_color(0x0A); vga_puts("USER (:)\n"); vga_set_color(0x0F);
+        vga_set_color(0x0A);
+        vga_puts("USER (:)\n");
     }
-    vga_puts(" Progres Tim  : Bootloader, CLI Shell, Thread (CPMK 2), Deadlock (CPMK 5), App Kas\n");
+    vga_set_color(0x0F);
+    vga_puts(" Arsitektur   : x86 32-bit, VGA teks 80x25, PIT 100 Hz\n");
+    vga_puts(" Timer        : ");
+    vga_put_int((int)timer_get_ticks());
+    vga_puts(" tick sejak boot\n");
+    vga_puts(" Heap         : ");
+    vga_put_int((int)memory_get_total());
+    vga_puts(" B total / ");
+    vga_put_int((int)memory_get_free());
+    vga_puts(" B bebas\n");
+    vga_puts(" RAMDisk      : ");
+    vga_put_int((int)vfs_get_total_bytes());
+    vga_puts(" B total / ");
+    vga_put_int((int)vfs_get_used_bytes());
+    vga_puts(" B terpakai\n");
+    vga_puts(" Progres Tim  : Bootloader, CLI, Thread, Deadlock, Memori, VFS, App Kas\n");
     vga_puts(" Tim Anggota  :\n");
     vga_puts("   1. Edwin Kurniawan Eka Julianda (11251082) - PIC 1 (Core, Driver, CLI)\n");
     vga_puts("   2. Muhammad Rasya Semardatu                 - PIC 2 (Thread & Concurrency)\n");
     vga_puts("   3. Andika Jusuf Jeremy Mustari              - PIC 3 (Memori & VFS)\n\n");
 }
 
+static void logout_to_user(void) {
+    protect_set_mode(MODE_USER);
+    vga_set_color(0x09);
+    vga_puts("[MODE] KERNEL -> USER. Kembali ke wowit-os>\n");
+    vga_set_color(0x0F);
+}
+
+/* ---- akses kernel tersembunyi ------------------------------------------- */
+
+static void try_kernel_access(void) {
+    char password[PASSWORD_MAX];
+
+    for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        int len = 0;
+
+        vga_set_color(0x0E);
+        vga_puts("Password Kernel (percobaan ");
+        vga_put_int(attempt);
+        vga_puts("/3): ");
+        vga_set_color(0x0F);
+
+        for (;;) {
+            char c = keyboard_getchar();
+            if (c == '\n') {
+                vga_putc('\n');
+                password[len] = '\0';
+                break;
+            }
+            if (c == '\b') {
+                if (len > 0) {
+                    len--;
+                    vga_backspace();
+                }
+                continue;
+            }
+            if (c >= 32 && c < 127 && len < PASSWORD_MAX - 1) {
+                password[len++] = c;
+                vga_putc('*');   /* seluruh karakter disensor */
+            }
+        }
+
+        if (streq(password, KERNEL_PASS)) {
+            protect_set_mode(MODE_KERNEL);
+            vga_set_color(0x0A);
+            vga_puts("[AUTH] Password benar. Akses KERNEL diberikan.\n");
+            vga_set_color(0x0F);
+            print_menu_kernel();
+            return;
+        }
+
+        vga_set_color(0x0C);
+        vga_puts("[!] Password salah. ");
+        if (attempt < MAX_ATTEMPTS) {
+            vga_puts("Sisa percobaan: ");
+            vga_put_int(MAX_ATTEMPTS - attempt);
+            vga_puts("\n");
+        } else {
+            vga_puts("Batas 3 percobaan terlampaui. Akses diblokir.\n");
+        }
+        vga_set_color(0x0F);
+    }
+
+    vga_set_color(0x0C);
+    vga_puts("[BLOKIR] Kembali ke User Mode (wowit-os>).\n");
+    vga_set_color(0x0F);
+}
+
+/* ---- perintah kernel ---------------------------------------------------- */
+
 static void handle_izin_command(const char *args) {
+    char fitur[16];
+    char val[8];
+    int fi = 0, vi = 0;
+    int enable = -1;
+
     while (*args == ' ') args++;
     if (*args == '\0') {
         protect_print_perms();
         return;
     }
 
-    char fitur[16];
-    int fi = 0;
-    while (*args && *args != ' ' && fi < 15) {
-        fitur[fi++] = *args++;
-    }
+    while (*args && *args != ' ' && fi < 15) fitur[fi++] = *args++;
     fitur[fi] = '\0';
 
     while (*args == ' ') args++;
-    char val[8];
-    int vi = 0;
-    while (*args && *args != ' ' && vi < 7) {
-        val[vi++] = *args++;
-    }
+    while (*args && *args != ' ' && vi < 7) val[vi++] = *args++;
     val[vi] = '\0';
 
-    int enable = -1;
     if (streq(val, "on") || streq(val, "ON") || streq(val, "1")) {
         enable = 1;
     } else if (streq(val, "off") || streq(val, "OFF") || streq(val, "0")) {
@@ -124,122 +292,212 @@ static void handle_izin_command(const char *args) {
     protect_print_perms();
 }
 
-static void run_command(const char *cmd) {
-    if (cmd[0] == 0) return;
+/* ---- pendaftaran aktivitas ke tabel utama widget monitor ---------------- */
 
-    os_mode_t current_mode = protect_get_mode();
+/* Jalankan perintah dan ukur durasinya dengan polling PIT. */
+static void tracked_call(const char *name, void (*fn)(void)) {
+    uint32_t before, elapsed;
+
+    timer_poll_ticks();
+    before = timer_get_ticks();
+    monitor_activity_begin(name, 0u);   /* NEW */
+    monitor_activity_ready();           /* READY */
+    monitor_activity_run();             /* RUNNING */
+    fn();
+    timer_poll_ticks();
+    elapsed = timer_get_ticks() - before;
+    monitor_activity_end(elapsed);      /* TERMINATED */
+}
+
+/* Untuk pengujian yang menunggu resource: NEW -> READY -> RUNNING -> WAITING. */
+static void tracked_wait_call(const char *name, void (*fn)(void)) {
+    uint32_t before, elapsed;
+
+    timer_poll_ticks();
+    before = timer_get_ticks();
+    monitor_activity_begin(name, 0u);
+    monitor_activity_ready();
+    monitor_activity_run();
+    monitor_activity_wait();            /* WAITING */
+    fn();
+    timer_poll_ticks();
+    elapsed = timer_get_ticks() - before;
+    monitor_activity_end(elapsed);      /* TERMINATED */
+}
+
+static void note_quantum(uint32_t value) {
+    char name[10];
+    char digits[10];
+    int i = 0, n = 0;
+
+    name[i++] = 'q';
+    name[i++] = '=';
+    if (value == 0u) {
+        digits[n++] = '0';
+    } else {
+        while (value > 0u && n < 10) {
+            digits[n++] = (char)('0' + (value % 10u));
+            value /= 10u;
+        }
+    }
+    while (n > 0 && i < 9) name[i++] = digits[--n];
+    name[i] = '\0';
+    monitor_activity_add(name, rr_get_quantum());
+}
+
+static void note_rr_begin(const char *args) {
+    char name[10];
+    int i = 0;
+
+    name[i++] = 'r';
+    name[i++] = 'r';
+    name[i++] = ':';
+    while (*args && *args != ' ' && i < 9) name[i++] = *args++;
+    name[i] = '\0';
+    monitor_activity_begin(name, rr_get_quantum());  /* NEW */
+    monitor_activity_ready();                        /* READY */
+    monitor_activity_run();                          /* RUNNING */
+}
+
+static void handle_quantum(const char *args) {
+    uint32_t old = rr_get_quantum();
+    uint32_t next;
+
+    while (*args == ' ') args++;
+    if (*args == '\0') {
+        vga_puts("Time quantum saat ini: ");
+        vga_put_int((int)old);
+        vga_puts(" tick (");
+        vga_put_int((int)(old * 10u));
+        vga_puts(" ms)\n");
+        vga_puts("Cara pakai: quantum <tick>, misalnya quantum 5 atau quantum 20\n");
+        return;
+    }
+
+    if (!scan_uint(&args, &next) || !rr_set_quantum(next)) {
+        vga_set_color(0x0C);
+        vga_puts("[!] Quantum harus bilangan 1-1000 tick.\n");
+        vga_set_color(0x0F);
+        return;
+    }
+
+    vga_set_color(0x0A);
+    vga_puts("[OK] Quantum diubah: ");
+    vga_put_int((int)old);
+    vga_puts(" -> ");
+    vga_put_int((int)next);
+    vga_puts(" tick\n");
+    vga_set_color(0x0F);
+    note_quantum(next);
+}
+
+static void handle_test_rr(const char *args) {
+    rr_task_t tasks[RR_SIM_MAX_TASKS];
+    int count;
+
+    while (*args == ' ') args++;
+    count = rr_parse_tasks(args, tasks, RR_SIM_MAX_TASKS);
+    if (count == 0) {
+        vga_set_color(0x0C);
+        vga_puts("[!] Format tidak dikenal. Contoh:\n");
+        vga_puts("    test-rr AB | test-rr ABCD | test-rr A:150 B:80\n");
+        vga_puts("    test-rr AB 120 | test-rr 4 12\n");
+        vga_set_color(0x0F);
+        return;
+    }
+
+    note_rr_begin(args);
+    rr_run(tasks, count);
+    monitor_activity_end(rr_get_quantum());
+}
+
+static void unknown_command(const char *cmd) {
+    vga_set_color(0x0C);
+    vga_puts("Perintah tidak dikenal: ");
+    vga_puts(cmd);
+    vga_puts("\n");
+    vga_set_color(0x0F);
+    vga_puts("Ketik 'help' untuk daftar perintah.\n");
+}
+
+static void run_command(const char *cmd) {
+    os_mode_t mode;
+
+    if (cmd[0] == '\0') return;
+    mode = protect_get_mode();
 
     if (streq(cmd, "help")) {
-        if (current_mode == MODE_KERNEL) {
-            print_menu_kernel();
-        } else {
-            print_menu_user();
-        }
-    } else if (streq(cmd, "kas")) {
-        finance_run();
+        if (mode == MODE_KERNEL) print_menu_kernel();
+        else print_menu_user();
     } else if (streq(cmd, "info")) {
-        do_info();
-    } else if (streq(cmd, "mode")) {
-        vga_puts("Mode saat ini: ");
-        if (current_mode == MODE_KERNEL) {
-            vga_puts("KERNEL (#). Ketik 'exit' untuk kembali ke mode USER.\n");
-        } else {
-            vga_puts("USER (:). Ketik 'mode kernel' untuk pindah ke mode KERNEL.\n");
-        }
-    } else if (streq(cmd, "mode kernel")) {
-        protect_set_mode(MODE_KERNEL);
-        vga_set_color(0x0C);
-        vga_puts("[MODE] USER -> KERNEL\n");
-        vga_set_color(0x0F);
-        print_menu_kernel();
+        tracked_call("info", do_info);
+    } else if (streq(cmd, "kas")) {
+        tracked_call("kas", finance_run);
     } else if (streq(cmd, "exit")) {
-        if (current_mode == MODE_KERNEL) {
-            protect_set_mode(MODE_USER);
-            vga_set_color(0x09);
-            vga_puts("[MODE] KERNEL -> USER\n");
-            vga_set_color(0x0F);
-            print_menu_user();
-        } else {
-            vga_puts("Sudah berada di mode USER.\n");
-        }
-    } else if (streq(cmd, "threads")) {
-        if (current_mode != MODE_KERNEL) {
-            vga_set_color(0x0C);
-            vga_puts("Perintah tidak dikenal: ");
-            vga_puts(cmd);
-            vga_puts("\n(Perintah 'threads' hanya tersedia di mode KERNEL. Ketik 'mode kernel')\n");
-            vga_set_color(0x0F);
-        } else {
-            task_print_threads();
-        }
-    } else if (streq(cmd, "log")) {
-        if (current_mode != MODE_KERNEL) {
-            vga_set_color(0x0C);
-            vga_puts("Perintah tidak dikenal: ");
-            vga_puts(cmd);
-            vga_puts("\n(Perintah 'log' hanya tersedia di mode KERNEL. Ketik 'mode kernel')\n");
-            vga_set_color(0x0F);
-        } else {
-            logbook_print();
-        }
-    } else if (streq(cmd, "laporan")) {
-        if (current_mode != MODE_KERNEL) {
-            vga_set_color(0x0C);
-            vga_puts("Perintah tidak dikenal: ");
-            vga_puts(cmd);
-            vga_puts("\n(Perintah 'laporan' hanya tersedia di mode KERNEL. Ketik 'mode kernel')\n");
-            vga_set_color(0x0F);
-        } else {
-            task_run_laporan();
-        }
-    } else if (starts_with(cmd, "izin")) {
-        if (current_mode != MODE_KERNEL) {
-            vga_set_color(0x0C);
-            vga_puts("Perintah tidak dikenal: ");
-            vga_puts(cmd);
-            vga_puts("\n(Perintah 'izin' hanya tersedia di mode KERNEL. Ketik 'mode kernel')\n");
-            vga_set_color(0x0F);
-        } else {
+        if (mode == MODE_KERNEL) logout_to_user();
+        else system_halt();
+    } else if (streq(cmd, "logout")) {
+        if (mode == MODE_KERNEL) logout_to_user();
+        else unknown_command(cmd);
+    } else if (mode == MODE_USER && streq(cmd, "kernel mode")) {
+        try_kernel_access();   /* perintah rahasia: tidak ada di help USER */
+    } else if (mode == MODE_KERNEL) {
+        if (streq(cmd, "thread")) {
+            tracked_call("thread", run_thread_demo);
+        } else if (streq(cmd, "deadlock")) {
+            tracked_wait_call("deadlock", test_deadlock);
+        } else if (streq(cmd, "deadlock-sim")) {
+            tracked_wait_call("deadlock-sim", test_deadlock_sim);
+        } else if (streq(cmd, "sync")) {
+            tracked_wait_call("sync", test_sync);
+        } else if (streq(cmd, "race")) {
+            tracked_call("race", test_race);
+        } else if (streq(cmd, "semaphore")) {
+            tracked_wait_call("semaphore", test_semaphore);
+        } else if (streq(cmd, "sched")) {
+            tracked_call("sched", test_sched);
+        } else if (streq(cmd, "memtest")) {
+            tracked_call("memtest", test_malloc);
+        } else if (streq(cmd, "vfs") || streq(cmd, "vfstest")) {
+            tracked_call("vfs", test_vfs);
+        } else if (streq(cmd, "protect")) {
+            tracked_call("protect", test_protect);
+        } else if (streq(cmd, "threads")) {
+            tracked_call("threads", task_print_threads);
+        } else if (streq(cmd, "log")) {
+            tracked_call("log", logbook_print);
+        } else if (streq(cmd, "laporan")) {
+            tracked_call("laporan", task_run_laporan);
+        } else if (starts_with(cmd, "izin")) {
             handle_izin_command(cmd + 4);
+        } else if (starts_with(cmd, "quantum")) {
+            handle_quantum(cmd + 7);
+        } else if (starts_with(cmd, "test-rr")) {
+            handle_test_rr(cmd + 7);
+        } else if (streq(cmd, "rr-sim")) {
+            monitor_activity_begin("rr-sim", rr_get_quantum());  /* NEW */
+            monitor_activity_ready();                            /* READY */
+            monitor_activity_run();                              /* RUNNING */
+            rr_simulate(4u, 8u);
+            monitor_activity_end(rr_get_quantum());
+        } else if (streq(cmd, "clear")) {
+            vga_clear();
+        } else if (starts_with(cmd, "echo")) {
+            const char *text = cmd + 4;
+            while (*text == ' ') text++;
+            vga_puts(text);
+            vga_putc('\n');
+        } else if (streq(cmd, "reboot")) {
+            system_reboot();
+        } else {
+            unknown_command(cmd);
         }
-    } else if (streq(cmd, "clear")) {
-        vga_clear();
-    } else if (starts_with(cmd, "echo")) {
-        const char *text = cmd + 4;
-        while (*text == ' ') text++;
-        vga_puts(text);
-        vga_putc('\n');
-    } else if (streq(cmd, "reboot")) {
-        system_reboot();
-    } else if (streq(cmd, "thread")) {
-        run_thread_demo();
-    } else if (streq(cmd, "sync")) {
-        test_sync();
-    } else if (streq(cmd, "race")) {
-        test_race();
-    } else if (streq(cmd, "semaphore")) {
-        test_semaphore();
-    } else if (streq(cmd, "deadlock")) {
-        test_deadlock();
-    } else if (streq(cmd, "deadlock-sim")) {
-        test_deadlock_sim();
-    } else if (streq(cmd, "protect")) {
-        test_protect();
-    } else if (streq(cmd, "sched")) {
-        test_sched();
-    } else if (streq(cmd, "memtest")) {
-        test_malloc();
-    } else if (streq(cmd, "vfs") || streq(cmd, "vfstest")) {
-        test_vfs();
     } else {
-        vga_set_color(0x0C);
-        vga_puts("Perintah tidak dikenal: ");
-        vga_puts(cmd);
-        vga_puts("\n");
-        vga_set_color(0x0F);
-        vga_puts("Ketik 'help' untuk daftar perintah.\n");
+        unknown_command(cmd);
     }
 }
+
+/* ---- entry point CLI ---------------------------------------------------- */
 
 void cli_init(void) {
     vga_set_color(0x09);
@@ -262,36 +520,24 @@ void cli_init(void) {
     vga_puts("  3. Andika Jusuf Jeremy Mustari\n");
     vga_puts("-------------------------------------------------------------------\n\n");
 
-    vga_set_color(0x09);
-    vga_puts("Ketik 'help' untuk melihat daftar perintah.\n\n");
+    print_menu_user();
+    vga_putc('\n');
 }
 
 void cli_run(void) {
     char buf[CMD_MAX];
-    int len;
 
     for (;;) {
         if (protect_get_mode() == MODE_KERNEL) {
-            vga_set_color(0x0C); /* Merah untuk mode KERNEL */
-            vga_puts("wowit-os#> ");
+            vga_set_color(0x0C);
+            vga_puts("wowit-kernel# ");
         } else {
-            vga_set_color(0x09); /* Biru terang untuk mode USER (sama seperti logo) */
-            vga_puts("wowit-os:> ");
+            vga_set_color(0x0B);
+            vga_puts("wowit-os> ");
         }
         vga_set_color(0x0F);
 
-        len = 0;
-        for (;;) {
-            char c = keyboard_getchar();
-            if (c == '\n') { vga_putc('\n'); break; }
-            if (c == '\b') {
-                if (len > 0) { len--; vga_backspace(); }
-            } else if (c >= 32 && c < 127 && len < CMD_MAX - 1) {
-                buf[len++] = c;
-                vga_putc(c);
-            }
-        }
-        buf[len] = 0;
+        read_line(buf, CMD_MAX);
         run_command(buf);
     }
 }

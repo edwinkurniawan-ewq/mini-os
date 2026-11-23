@@ -27,6 +27,8 @@ typedef struct {
     uint32_t     esp;              /* saved stack pointer (context switch) */
     uint32_t     ebp;              /* saved base pointer */
     uint32_t     eip;              /* instruction pointer at creation */
+    uint32_t     start_tick;       /* tick saat task dibuat */
+    uint32_t     cpu_ticks;        /* akumulasi tick eksekusi (dari timer/scheduler) */
     task_state_t state;
     int          id;
     char         name[16];

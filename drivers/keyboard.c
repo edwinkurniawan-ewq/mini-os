@@ -1,6 +1,9 @@
 #include <stdint.h>
 #include "io.h"
 #include "vga.h"
+#include "protect.h"
+#include "monitor.h"
+#include "timer.h"
 
 static const char normal[128] = {
     0, 27, '1','2','3','4','5','6','7','8','9','0','-','=', '\b', '\t',
@@ -16,6 +19,8 @@ static const char shifted[128] = {
 };
 
 static int shift = 0;
+static int tab_held = 0;   /* debounce: hindari toggle berulang saat TAB ditahan */
+static int esc_held = 0;
 
 /* Helper komunikasi PS/2 Controller */
 static void ps2_wait_write(void) {
@@ -66,6 +71,14 @@ char keyboard_getchar(void) {
     static uint8_t mouse_packet[4];
 
     for (;;) {
+        /*
+         * Polling non-blocking: setiap iterasi baca counter PIT agar tick
+         * terus berjalan walaupun IRQ0 belum di-wire, lalu segarkan widget
+         * bila detik thread berubah. Tidak ada hlt/waiting pasif di sini.
+         */
+        timer_poll_ticks();
+        monitor_poll();
+
         uint8_t status = inb(0x64);
         if (!(status & 1)) continue; /* Tunggu sampai ada data di buffer */
 
@@ -113,7 +126,31 @@ char keyboard_getchar(void) {
 
         if (data == 0x2A || data == 0x36) { shift = 1; continue; }
         if (data == 0xAA || data == 0xB6) { shift = 0; continue; }
+
+        /* Release TAB/ESC dipakai untuk debounce sebelum key release umum. */
+        if (data == 0x8F) { tab_held = 0; continue; }
+        if (data == 0x81) { esc_held = 0; continue; }
         if (data & 0x80) continue;    /* Key release */
+
+        /* TAB (0x0F): buka/tutup monitor HANYA di Kernel Mode.
+         * Hanya bereaksi sekali per tekan (key repeat diabaikan). */
+        if (data == 0x0F) {
+            if (!tab_held) {
+                tab_held = 1;
+                if (protect_get_mode() == MODE_KERNEL) monitor_toggle();
+            }
+            continue;
+        }
+
+        /* ESC (0x01): tutup monitor bila sedang tampil. */
+        if (data == 0x01) {
+            if (!esc_held && monitor_is_open()) monitor_close();
+            esc_held = 1;
+            continue;
+        }
+
+        /* Saat monitor tampil, abaikan tombol lain sampai TAB/ESC ditekan. */
+        if (monitor_is_open()) continue;
 
         char c = shift ? shifted[data] : normal[data];
         if (c) return c;

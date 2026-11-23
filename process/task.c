@@ -3,6 +3,7 @@
 #include "vga.h"
 #include "memory.h"
 #include "finance.h"
+#include "timer.h"
 
 tcb_t  task_table[MAX_TASKS];
 int    task_count   = 0;
@@ -72,6 +73,8 @@ void task_init(void) {
         task_table[i].esp     = 0;
         task_table[i].ebp     = 0;
         task_table[i].eip     = 0;
+        task_table[i].start_tick = timer_get_ticks();
+        task_table[i].cpu_ticks  = 0;
         task_table[i].wait_res  = NULL;
         task_table[i].wait_kind = WAIT_NONE;
     }
@@ -105,6 +108,8 @@ int task_create(const char *name, void (*entry)(void)) {
     t->esp = (uint32_t)sp;
     t->ebp = 0;
     t->eip = (uint32_t)entry;
+    t->start_tick = timer_get_ticks();
+    t->cpu_ticks  = 0;
 
     t->state = TASK_READY;
     return t->id;
@@ -175,6 +180,8 @@ void task_reset(void) {
         task_table[i].wait_res   = NULL;
         task_table[i].wait_kind  = WAIT_NONE;
         task_table[i].name[0]    = '\0';
+        task_table[i].start_tick = timer_get_ticks();
+        task_table[i].cpu_ticks  = 0;
     }
     task_count            = 1;
     task_table[0].state   = TASK_RUNNING;
