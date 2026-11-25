@@ -108,7 +108,7 @@ static void print_menu_user(void) {
     vga_puts("=== MENU UTAMA USER (wowit-os>) ===\n");
     vga_set_color(0x0F);
     vga_puts("  info   - identitas & spesifikasi dasar WOWIT OS\n");
-    vga_puts("  kas    - aplikasi pencatat keuangan (CRUD)\n");
+    vga_puts("  kas    - Catatan Keuangan Pribadi WOWIT Kas (CRUD)\n");
     vga_puts("  help   - tampilkan  perintah ini\n");
     vga_puts("  exit   - shutdown / halt sistem\n");
 }
@@ -122,7 +122,7 @@ static void print_menu_kernel(void) {
     vga_puts("=== PERINTAH USER MODE ===\n");
     vga_set_color(0x0F);
     vga_puts("  info   - identitas & spesifikasi dasar WOWIT OS\n");
-    vga_puts("  kas    - aplikasi pencatat keuangan (CRUD)\n");
+    vga_puts("  kas    - Catatan Keuangan Pribadi WOWIT Kas (CRUD)\n");
     vga_puts("  help   - tampilkan daftar perintah mode ini\n");
     vga_puts("  exit   - di Kernel: logout ke User | di User: shutdown\n");
     vga_puts("  logout - kembali ke User Mode (wowit-os>)\n");
@@ -133,10 +133,9 @@ static void print_menu_kernel(void) {
     vga_set_color(0x0F);
     vga_puts("  help         - daftar perintah kernel ini\n");
     vga_puts("  thread       - uji siklus thread (CPMK 2)\n");
-    vga_puts("  deadlock     - uji mutex & deadlock + deteksi (CPMK 5)\n");
-    vga_puts("  deadlock-sim - simulasi deadlock dua kasir\n");
-    vga_puts("  sync         - uji mutex aman (tanpa lost update)\n");
-    vga_puts("  race         - uji race condition tanpa mutex\n");
+    vga_puts("  deadlock     - konflik buku kas vs kas.dat + deteksi & resource ordering\n");
+    vga_puts("  sync         - Catat Transaksi + Auto-Backup pakai kas_mutex (akurat)\n");
+    vga_puts("  race         - Catat Transaksi + Auto-Backup tanpa mutex (lost update)\n");
     vga_puts("  semaphore    - uji counting semaphore\n");
     vga_puts("  sched        - uji penjadwalan / lifecycle thread\n");
     vga_puts("  memtest      - uji alokasi memori kmalloc/kfree\n");
@@ -149,8 +148,8 @@ static void print_menu_kernel(void) {
     vga_puts("  protect      - uji proteksi hak akses & audit log\n");
     vga_puts("    Uji manual: izin hapus off -> logout -> kas -> pilih 4 (hapus)\n");
     vga_puts("  threads      - daftar thread terdaftar\n");
-    vga_puts("  log          - buku log aktivitas kas\n");
-    vga_puts("  laporan      - laporan kas oleh 2 thread\n");
+    vga_puts("  log          - buku log aktivitas keuangan pribadi\n");
+    vga_puts("  laporan      - laporan keuangan pribadi oleh 2 thread\n");
     vga_puts("  izin         - lihat/atur izin: izin hapus off\n");
     vga_puts("  quantum [n]  - lihat/ubah time quantum RR (1-1000 tick)\n");
     vga_puts("  test-rr AB   - RR fleksibel: AB, A:150 B:80, AB 120\n");
@@ -562,8 +561,6 @@ static void run_command(const char *cmd) {
             tracked_call("thread", run_thread_demo);
         } else if (streq(cmd, "deadlock")) {
             tracked_wait_call("deadlock", test_deadlock);
-        } else if (streq(cmd, "deadlock-sim")) {
-            tracked_wait_call("deadlock-sim", test_deadlock_sim);
         } else if (streq(cmd, "sync")) {
             tracked_wait_call("sync", test_sync);
         } else if (streq(cmd, "race")) {

@@ -12,6 +12,7 @@ typedef struct {
     int          owner_id;                 /* id task pemilik; -1 = bebas */
     int          waiters[SYNC_MAX_WAITERS];
     int          head, tail, nwait;
+    const char  *name;                     /* nama resource untuk wait-for graph */
 } mutex_t;
 
 /* Counting semaphore */
@@ -23,6 +24,7 @@ typedef struct {
 
 /* ---- Mutex -------------------------------------------------------------- */
 void mutex_init(mutex_t *m);
+void mutex_init_named(mutex_t *m, const char *name); /* mutex + label resource */
 void mutex_lock(mutex_t *m);            /* memblokir task jika sedang dipegang */
 int  mutex_trylock(mutex_t *m);         /* 1 = berhasil, 0 = sedang dipegang */
 int  mutex_unlock(mutex_t *m);          /* 1 = sukses, 0 = bukan pemilik */
