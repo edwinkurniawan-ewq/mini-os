@@ -1,9 +1,3 @@
-# Dokumentasi Penggunaan Generative AI — WOWIT OS
-
-Dokumen ini memenuhi catatan pada `requirement.txt` bahwa penggunaan bantuan
-Generative AI **wajib didokumentasikan**. Seluruh kode tetap ditinjau, diuji,
-dan disetujui oleh tim pengembang sebelum dimasukkan ke repositori.
-
 ## 1. Informasi Umum
 
 | Item | Keterangan |
