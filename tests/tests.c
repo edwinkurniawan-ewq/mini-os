@@ -515,12 +515,20 @@ void test_malloc(void) {
     }
 }
 
+
 void test_vfs(void) {
     char payload[16];
     char updated[16];
     char hasil[16];
-    int ok_create, ok_read1, ok_update, ok_read2, ok_delete_read;
-    int written, read_bytes;
+
+    int ok_create, ok_read1, ok_update;
+    int ok_read2, ok_delete_read;
+    int written, read_bytes, deleted;
+
+    size_t heap_before;
+    size_t heap_after_create;
+    size_t heap_after_update;
+    size_t heap_after_delete;
 
     for (int i = 0; i < 16; i++) {
         payload[i] = (char)('A' + i);
@@ -528,63 +536,110 @@ void test_vfs(void) {
     }
 
     vga_set_color(0x0C);
-    vga_puts("\n=== UJI VFS RAMDISK (CREATE-READ-UPDATE-DELETE) ===\n");
+    vga_puts("\n=== UJI VFS RAMDISK CRUD + HEAP ===\n");
     vga_set_color(0x0F);
+
+    /* Bersihkan file sisa pengujian sebelumnya */
+    if (vfs_exists("diag.dat")) {
+        vfs_delete("diag.dat");
+    }
+
+    /* Catat penggunaan heap sebelum CREATE */
+    heap_before = memory_get_used();
 
     /* 1. CREATE */
     written = vfs_write("diag.dat", payload, sizeof(payload));
-    ok_create = (written == 0 && vfs_exists("diag.dat") &&
+
+    heap_after_create = memory_get_used();
+
+    ok_create = (written == 0 &&
+                 vfs_exists("diag.dat") &&
                  vfs_get_size("diag.dat") == sizeof(payload));
+
     vga_puts("  1. create  -> ");
     vga_puts(ok_create ? "OK" : "GAGAL");
-    vga_puts(" (size=");
-    vga_put_int((int)vfs_get_size("diag.dat"));
-    vga_puts(" B)\n");
+    vga_puts("\n");
 
-    /* 2. READ (verifikasi isi awal) */
+    /* 2. READ dan verifikasi isi awal */
     read_bytes = vfs_read("diag.dat", hasil, sizeof(hasil));
+
     ok_read1 = (read_bytes == (int)sizeof(payload));
+
     for (int i = 0; ok_read1 && i < 16; i++) {
-        if (hasil[i] != payload[i]) ok_read1 = 0;
+        if (hasil[i] != payload[i]) {
+            ok_read1 = 0;
+        }
     }
+
     vga_puts("  2. read    -> ");
     vga_puts(ok_read1 ? "OK (isi=A..P)" : "GAGAL");
-    vga_puts(" (");
-    vga_put_int(read_bytes);
-    vga_puts(" B)\n");
+    vga_puts("\n");
 
-    /* 3. UPDATE: tulis ulang nama yang sama dengan isi berbeda */
+    /* 3. UPDATE */
     written = vfs_write("diag.dat", updated, sizeof(updated));
-    ok_update = (written == 0 && vfs_get_size("diag.dat") == sizeof(updated));
+
+    ok_update = (written == 0 &&
+                 vfs_get_size("diag.dat") == sizeof(updated));
+
+    heap_after_update = memory_get_used();
+
     vga_puts("  3. update  -> ");
     vga_puts(ok_update ? "OK" : "GAGAL");
-    vga_puts(" (size=");
-    vga_put_int((int)vfs_get_size("diag.dat"));
-    vga_puts(" B)\n");
+    vga_puts("\n");
 
-    /* 4. READ ULANG: isi harus berubah, bukan isi lama */
-    for (int i = 0; i < 16; i++) hasil[i] = 0;
+    /* 4. READ ulang dan verifikasi isi baru */
     read_bytes = vfs_read("diag.dat", hasil, sizeof(hasil));
+
     ok_read2 = (read_bytes == (int)sizeof(updated));
+
     for (int i = 0; ok_read2 && i < 16; i++) {
-        if (hasil[i] != updated[i]) ok_read2 = 0;
+        if (hasil[i] != updated[i]) {
+            ok_read2 = 0;
+        }
     }
+
     vga_puts("  4. re-read  -> ");
-    vga_puts(ok_read2 ? "OK (isi berubah, bukan A..P)" : "GAGAL");
+    vga_puts(ok_read2 ? "OK (isi berubah)" : "GAGAL");
     vga_puts("\n");
 
-    /* 5. DELETE + 6. READ harus gagal */
-    written = vfs_delete("diag.dat");
+    /* 5. DELETE */
+    deleted = vfs_delete("diag.dat");
+
+    /* 6. READ setelah DELETE harus gagal */
     read_bytes = vfs_read("diag.dat", hasil, sizeof(hasil));
-    ok_delete_read = (written == 0 && !vfs_exists("diag.dat") && read_bytes < 0);
+
+    ok_delete_read = (deleted == 0 &&
+                      !vfs_exists("diag.dat") &&
+                      read_bytes < 0);
+
+    heap_after_delete = memory_get_used();
+
     vga_puts("  5. delete  -> ");
-    vga_puts(written == 0 ? "OK" : "GAGAL");
-    vga_puts(" | 6. read after delete -> ");
-    vga_puts(read_bytes < 0 ? "GAGAL (tidak ditemukan, sesuai harapan)"
-                            : "MASIH ADA (bug)");
+    vga_puts(deleted == 0 ? "OK" : "GAGAL");
     vga_puts("\n");
 
-    vga_puts("  used=");
+    vga_puts("  6. read after delete -> ");
+    vga_puts(read_bytes < 0 ? "OK (file tidak ditemukan)" : "GAGAL");
+    vga_puts("\n");
+
+    /* Tampilkan penggunaan heap */
+    vga_puts("\n  heap sebelum       : ");
+    vga_put_int((int)heap_before);
+    vga_puts(" B\n");
+
+    vga_puts("  heap setelah create: ");
+    vga_put_int((int)heap_after_create);
+    vga_puts(" B\n");
+
+    vga_puts("  heap setelah update: ");
+    vga_put_int((int)heap_after_update);
+    vga_puts(" B\n");
+
+    vga_puts("  heap setelah delete: ");
+    vga_put_int((int)heap_after_delete);
+    vga_puts(" B\n");
+
+    vga_puts("  VFS used=");
     vga_put_int((int)vfs_get_used_bytes());
     vga_puts("/");
     vga_put_int((int)vfs_get_total_bytes());
@@ -592,15 +647,28 @@ void test_vfs(void) {
     vga_put_int(vfs_get_used_files());
     vga_puts("\n");
 
-    if (ok_create && ok_read1 && ok_update && ok_read2 && ok_delete_read) {
+    /* Evaluasi seluruh pengujian */
+    if (ok_create &&
+        ok_read1 &&
+        ok_update &&
+        ok_read2 &&
+        ok_delete_read &&
+        heap_after_create > heap_before &&
+        heap_after_update > heap_before &&
+        heap_after_delete == heap_before) {
+
         vga_set_color(0x0A);
-        vga_puts("  [LULUS] siklus CRUD RAMDisk lengkap & terverifikasi\n");
+        vga_puts("  [LULUS] CRUD VFS dan integrasi heap berhasil\n");
+
     } else {
         vga_set_color(0x0C);
-        vga_puts("  [GAGAL] siklus CRUD RAMDisk tidak konsisten\n");
-    }
-    vga_set_color(0x0F);
+        vga_puts("  [GAGAL] Pengujian VFS atau integrasi heap bermasalah\n");
 
-    /* Pastikan berkas uji tidak tertinggal walaupun ada langkah gagal. */
-    if (vfs_exists("diag.dat")) vfs_delete("diag.dat");
+        /* Bersihkan file jika pengujian gagal di tengah jalan */
+        if (vfs_exists("diag.dat")) {
+            vfs_delete("diag.dat");
+        }
+    }
+
+    vga_set_color(0x0F);
 }

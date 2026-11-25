@@ -1,5 +1,6 @@
 #include "vfs.h"
 #include "kernel.h"
+#include "memory.h"
 
 static vfs_file_t ramdisk_files[VFS_MAX_FILES];
 
@@ -21,21 +22,44 @@ void vfs_init(void) {
     for (int i = 0; i < VFS_MAX_FILES; i++) {
         ramdisk_files[i].used = 0;
         ramdisk_files[i].size = 0;
+        ramdisk_files[i].data = NULL;
         ramdisk_files[i].name[0] = '\0';
     }
 }
 
 int vfs_write(const char *name, const void *buf, size_t size) {
-    if (!name || !buf || size > VFS_FILE_SIZE) return -1;
+    if (!name || !buf || size > VFS_FILE_SIZE) {
+        return -1;
+    }
+
+    const uint8_t *src = (const uint8_t *)buf;
 
     /* Cari file yang sudah ada (UPDATE) */
     for (int i = 0; i < VFS_MAX_FILES; i++) {
-        if (ramdisk_files[i].used && v_streq(ramdisk_files[i].name, name)) {
-            const uint8_t *src = (const uint8_t *)buf;
-            for (size_t s = 0; s < size; s++) {
-                ramdisk_files[i].data[s] = src[s];
+        if (ramdisk_files[i].used &&
+            v_streq(ramdisk_files[i].name, name)) {
+
+            uint8_t *new_data = NULL;
+
+            if (size > 0) {
+                new_data = (uint8_t *)kmalloc(size);
+
+                if (new_data == NULL) {
+                    return -1;
+                }
+
+                for (size_t s = 0; s < size; s++) {
+                    new_data[s] = src[s];
+                }
             }
+
+            if (ramdisk_files[i].data != NULL) {
+                kfree(ramdisk_files[i].data);
+            }
+
+            ramdisk_files[i].data = new_data;
             ramdisk_files[i].size = size;
+
             return 0;
         }
     }
@@ -43,13 +67,31 @@ int vfs_write(const char *name, const void *buf, size_t size) {
     /* Cari slot kosong (CREATE) */
     for (int i = 0; i < VFS_MAX_FILES; i++) {
         if (!ramdisk_files[i].used) {
-            v_strcpy(ramdisk_files[i].name, name, VFS_MAX_FILENAME);
-            const uint8_t *src = (const uint8_t *)buf;
-            for (size_t s = 0; s < size; s++) {
-                ramdisk_files[i].data[s] = src[s];
+
+            uint8_t *new_data = NULL;
+
+            if (size > 0) {
+                new_data = (uint8_t *)kmalloc(size);
+
+                if (new_data == NULL) {
+                    return -1;
+                }
+
+                for (size_t s = 0; s < size; s++) {
+                    new_data[s] = src[s];
+                }
             }
+
+            v_strcpy(
+                ramdisk_files[i].name,
+                name,
+                VFS_MAX_FILENAME
+            );
+
+            ramdisk_files[i].data = new_data;
             ramdisk_files[i].size = size;
             ramdisk_files[i].used = 1;
+
             return 0;
         }
     }
@@ -94,16 +136,29 @@ size_t vfs_get_size(const char *name) {
     return 0;
 }
 
+
 int vfs_delete(const char *name) {
     if (!name) return -1;
+
     for (int i = 0; i < VFS_MAX_FILES; i++) {
-        if (ramdisk_files[i].used && v_streq(ramdisk_files[i].name, name)) {
-            ramdisk_files[i].used = 0;
+        if (ramdisk_files[i].used &&
+            v_streq(ramdisk_files[i].name, name)) {
+
+            // Bebaskan payload dari heap
+            if (ramdisk_files[i].data != NULL) {
+                kfree(ramdisk_files[i].data);
+            }
+
+            // Reset metadata file
+            ramdisk_files[i].data = NULL;
             ramdisk_files[i].size = 0;
+            ramdisk_files[i].used = 0;
             ramdisk_files[i].name[0] = '\0';
+
             return 0;
         }
     }
+
     return -1;
 }
 

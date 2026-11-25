@@ -10,7 +10,7 @@
 
 typedef struct {
     char name[VFS_MAX_FILENAME];
-    uint8_t data[VFS_FILE_SIZE];
+    uint8_t *data;
     size_t size;
     int used;
 } vfs_file_t;
