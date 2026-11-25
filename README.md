@@ -1,184 +1,160 @@
-# 🖥️ Mini OS Project
+# WOWIT OS (Mini Bare-Metal x86 Operating System)
 
-Proyek pengembangan Sistem Operasi Mini (Mini OS) berbasis 32-bit x86/x86_64 yang berjalan di atas emulator **QEMU**. Proyek ini mencakup komponen *low-level bootloader*, *kernel CLI/shell*, *multithreading & scheduler*, *primitif sinkronisasi*, *dynamic memory allocator*, hingga *Virtual File System (VFS)* berbasis RAMDisk.
-
-> **Dokumentasi Generative AI:** sesuai catatan `requirement.txt`, penggunaan bantuan AI selama pengembangan didokumentasikan di [`docs/AI_USAGE.md`](docs/AI_USAGE.md).
+WOWIT OS adalah sistem operasi *bare-metal* 32-bit berbasis arsitektur x86 yang dibangun dari nol menggunakan bahasa C dan Assembly (NASM) tanpa bergantung pada *standard library* sistem operasi host (`stdio.h`, `stdlib.h`, `string.h`). Sistem operasi ini dirancang secara modular dengan dukungan *preemptive multitasking*, manajemen memori dinamis, sistem berkas virtual (RAMDisk), kontrol hak akses berbasis mode, serta aplikasi pengguna interaktif.
 
 ---
 
-## 🛠️ Prasyarat & Lingkungan Pengembangan
+## 1. Struktur Direktori & Daftar File
 
-Untuk melakukan kompilasi dan menjalankan Mini OS ini, Anda memerlukan perangkat lunak berikut:
-
-* **Compiler C & Assembler:** `gcc` (i686-elf-gcc / gcc), `nasm`
-* **Linker & Build Tool:** `gnu ld`, `make`
-* **Emulator:** `qemu-system-i386` atau `qemu-system-x86_64`
-
----
-
-## 🚀 Panduan Setup QEMU & Toolchain
-
-Pilih instruksi instalasi sesuai dengan Sistem Operasi yang Anda gunakan:
-
-### 1. Ubuntu / Debian / WSL (Windows Subsystem for Linux)
-Buka terminal dan jalankan perintah:
-```bash
-sudo apt update
-sudo apt install build-essential nasm qemu-system-x86 gcc-multilib
-```
-
-### 2. macOS (via Homebrew)
-Buka terminal dan jalankan:
-```bash
-brew install nasm qemu make
-# Jika memerlukan cross-compiler i686-elf:
-brew install i686-elf-gcc
-```
-
-### 3. Windows (via MSYS2 / MinGW-w64)
-1. Unduh dan pasang **MSYS2** dari [msys2.org](https://www.msys2.org/).
-2. Buka terminal **MSYS2 UCRT64** dan jalankan:
-   ```bash
-   pacman -S gcc make nasm mingw-w64-x86_64-qemu
-   ```
-3. Tambahkan *path* MSYS2 ke Environment Variables Windows jika ingin menjalankannya lewat Command Prompt / PowerShell.
-
----
-
-## 💻 Cara Kompilasi & Menjalankan OS
-
-### 1. Kloning Repositori & Buka Direktori
-```bash
-git clone https://github.com/username/mini-os.git
-cd mini-os
-```
-
-### 2. Melakukan Kompilasi & Build
-Untuk mengompilasi kode sumber Assembly dan C menjadi *image kernel*:
-```bash
-make
-```
-
-### 3. Menjalankan Mini OS di QEMU
-Untuk menyimulasikan dan membuka tampilan Mini OS (termasuk *splash logo ASCII* awal):
-```bash
-make run
-```
-*Atau jalankan perintah QEMU langsung secara manual:*
-```bash
-qemu-system-i386 -kernel build/kernel.bin
-# atau jika menggunakan format disk image:
-qemu-system-i386 -fda build/mini-os.img
-```
-
-### 4. Membersihkan Berkas Kompilasi
-Untuk menghapus berkas biner `.o` dan `.bin` hasil kompilasi sebelumnya:
-```bash
-make clean
-```
-
----
-
-## 📁 Struktur Direktori Proyek
+Seluruh kode sumber dipisahkan ke dalam direktori spesifik sesuai subsistem arsitektur sistem operasi, sementara seluruh artefak hasil kompilasi (`.o`, `.d`, `kernel.exe`, `kernel.bin`) diisolasi ke dalam folder `build/`.
 
 ```text
 mini-os/
-├── boot/                # Tahap boot & linker
-│   ├── boot.asm         # Assembly entry point & bootloader
-│   └── linker.ld        # Linker script untuk penataan memori kernel
-├── drivers/             # Driver hardware
-│   ├── keyboard.c       # Driver pembaca scancode keyboard
-│   ├── timer.c          # Programmable Interval Timer (PIT)
-│   └── vga.c            # Driver VGA Text Mode (80x25 display)
-├── cli/                 # Modul CLI / shell
-│   └── cli.c            # Parser & logika perintah CLI
-├── finance/             # Modul aplikasi kas
-│   └── finance.c        # CRUD transaksi keuangan
-├── logbook/             # Modul buku log
-│   └── logbook.c        # Pencatatan aktivitas ke RAMDisk
-├── memory/              # Modul alokator memori dinamis
-│   └── memory.c         # Dynamic Memory Allocator (malloc/free)
-├── process/             # Modul proses: TCB, scheduler, thread
-│   ├── switch.asm       # Context switching Assembly
-│   ├── task.c           # TCB, Round Robin scheduler, primitif blocking
-│   └── thread.c         # Demo siklus thread (CPMK 2)
-├── protection/          # Modul proteksi hak akses
-│   └── protect.c        # Mode USER/KERNEL, izin per fitur, audit log
-├── sync/                # Modul sinkronisasi
-│   └── sync.c           # Mutex (blocking) + Semaphore + deteksi deadlock
-├── tests/               # Modul pengujian (test harness)
-│   └── tests.c          # race condition, deadlock, semaphore, proteksi
-├── vfs/                 # Modul VFS RAMDisk
-│   └── vfs.c            # Virtual File System berbasis RAMDisk
-├── kernel/              # Inti kernel & header bersama
-│   ├── main.c           # Entry-point kernel & registrasi modul
-│   ├── gdt.c            # Global Descriptor Table 32-bit
-│   ├── idt.c            # IDT 256 entri + PIC 8259 remap + IRQ dispatch
-│   ├── stubs.c          # Cadangan modul kernel (tidak ada stub aktif)
-│   └── include/         # Semua header (.h) — dipakai lintas modul
-│       ├── cli.h        # Antarmuka Shell / CLI
-│       ├── finance.h    # Aplikasi pencatat keuangan
-│       ├── idt.h        # IDT, registers_t, vektor yield
-│       ├── io.h         # Helper akses port I/O
-│       ├── irq.h        # Simpan/pulihkan EFLAGS (cli/sti atomik)
-│       ├── kernel.h     # Definisi umum kernel
-│       ├── keyboard.h   # Antarmuka driver keyboard
-│       ├── logbook.h    # Buku log aktivitas
-│       ├── memory.h     # Memori alokator
-│       ├── protect.h    # Proteksi & Hak Akses
-│       ├── sync.h       # Mutex & Semaphore
-│       ├── task.h       # TCB & Scheduler
-│       ├── tests.h      # Test harness
-│       ├── thread.h     # Thread lifecycle
-│       ├── timer.h      # Timer PIT
-│       ├── vfs.h        # Virtual File System
-│       └── vga.h        # Header layar VGA
-├── build/               # Hasil build (.o, .d, kernel.bin) — diabaikan Git
-└── Makefile             # Automated Build System
+├── boot/
+│   ├── boot.asm             # Entry point Multiboot bootloader & inisialisasi stack 16 KB
+│   └── linker.ld            # Linker script untuk tata letak segmen memori kernel (.text, .data, .bss)
+├── build/                   # Direktori output hasil kompilasi (diabaikan oleh Git)
+├── cli/
+│   └── cli.c                # Antarmuka Command Line Interface (User Mode & Kernel Mode)
+├── drivers/
+│   ├── keyboard.c           # Driver PS/2 Keyboard (polling) & IntelliMouse (scroll wheel)
+│   ├── timer.c              # Driver Programmable Interval Timer (PIT) & penghitung tick preemptive
+│   └── vga.c                # Driver VGA Text Mode (0xB8000), scrollback buffer 200 baris, & overlay UI
+├── finance/
+│   └── finance.c            # Sub-shell aplikasi pencatat keuangan (CRUD) terintegrasi VFS & ACL
+├── kernel/
+│   ├── include/             # Seluruh file header (.h) untuk antarmuka antar-modul kernel
+│   ├── main.c               # Fungsi utama inisialisasi seluruh subsistem kernel (_kernel_main)
+│   ├── rr.c                 # Mesin simulasi penjadwalan Round Robin dinamis
+│   └── stubs.c              # Implementasi GDT, IDT, dan remapping PIC 8259 untuk interupsi hardware
+├── logbook/
+│   └── logbook.c            # Modul pencatatan aktivitas transaksi keuangan
+├── memory/
+│   └── memory.c             # Manajemen heap dinamis 64 KB (kmalloc/kfree, first-fit, splitting, coalescing)
+├── process/
+│   ├── switch.asm           # Rutin Assembly untuk low-level context switching antar-thread
+│   ├── task.c               # Manajemen Thread Control Block (TCB) & algoritma Round Robin scheduler
+│   └── thread.c             # Demonstrasi siklus hidup thread (NEW, READY, RUNNING, WAITING, TERMINATED)
+├── protection/
+│   └── protect.c            # Kontrol hak akses berbasis mode (USER/KERNEL), critical section, & audit log
+├── sync/
+│   └── sync.c               # Primitif sinkronisasi atomik (Mutex, Counting Semaphore) & deteksi Deadlock
+├── tests/
+│   └── tests.c              # Kumpulan test harness untuk verifikasi seluruh subsistem OS
+├── vfs/
+│   └── vfs.c                # Virtual File System berbasis RAMDisk (8 file x 8 KB)
+├── .gitignore               # Konfigurasi pengecualian file build dari repositori Git
+└── Makefile                 # Otomatisasi kompilasi GCC, NASM, linking, dan eksekusi QEMU
 ```
 
 ---
 
-## 👥 Pembagian Tugas & Tanggung Jawab Anggota
+## 2. Arsitektur Hak Akses (User Mode vs Kernel Mode)
 
-| Anggota Tim | Peran / Fokus Utama | Modul / File yang Dikerjakan |
-| :--- | :--- | :--- |
-| **Edwin** *(PIC 1)* | **Low-Level Core, Hardware Driver, CLI Kernel & Build System** | `boot/*`, `drivers/*`, `kernel/main.c`, `kernel/stubs.c`, `cli/*`, `finance/*`, `logbook/*`, `Makefile`, `cli.h`, `kernel.h`, `vga.h` |
-| **Rasya** *(PIC 2)* | **Concurrency Engine (Thread, Scheduler CPU, Sinkronisasi, Deadlock & Proteksi)** | `process/switch.asm`, `process/task.c`, `sync/sync.c`, `protection/protect.c`, `tests/tests.c`, `drivers/timer.c`, `task.h`, `sync.h`, `protect.h`, `tests.h` |
-| **Andika** *(PIC 3)* | **Manajemen Memori Dinamis & Virtual File System (VFS)** | `memory/memory.c`, `vfs/vfs.c`, `memory.h`, `vfs.h` |
+WOWIT OS menerapkan pemisahan lingkungan eksekusi menjadi dua tingkat hak akses untuk menjaga keamanan dan stabilitas sistem:
+
+### A. User Mode (`wowit-os>`)
+* **Status:** Mode bawaan (*default*) saat sistem pertama kali melakukan *booting*.
+* **Batasan:** Pengguna hanya dapat mengakses perintah dasar dan aplikasi pengguna. Akses ke pengujian sistem tingkat rendah, konfigurasi penjadwalan CPU, dan monitor thread dikunci.
+* **Proteksi Aplikasi:** Operasi sensitif (seperti penghapusan data pada aplikasi keuangan) dapat dibatasi oleh kebijakan izin (*Access Control List*) yang diatur dari Kernel Mode.
+
+### B. Kernel Mode (`wowit-kernel#`)
+* **Cara Akses:** Ketikkan perintah tersembunyi `kernel mode` pada prompt User Mode (`wowit-os>`). Perintah ini sengaja tidak ditampilkan pada menu `help` di User Mode.
+* **Autentikasi:** Sistem akan meminta kata sandi administrator (**Password default:** `wowit123`). Karakter yang diketik disensor menggunakan tanda bintang (`*`).
+* **Keamanan Percobaan:** Pengguna memiliki maksimal **3 kali percobaan** memasukkan password. Jika gagal sebanyak 3 kali berturut-turut, sistem memblokir akses dan mengembalikan pengguna secara paksa ke User Mode.
+* **Monitor Real-Time (`TAB`):** Saat berada di dalam Kernel Mode, menekan tombol **`TAB`** kapan saja akan menampilkan widget *overlay* **WOWIT OS Monitor** di pojok kanan atas layar secara *real-time* (menampilkan daftar TCB aktif, status, penggunaan memori dalam `KB`, waktu berjalan dalam detik/tick, serta sisa kapasitas Heap dan RAMDisk). Tekan **`TAB`** atau **`ESC`** kembali untuk menutup widget.
 
 ---
 
-## 📅 Roadmap & Progress Mingguan (Weekly Planner)
+## 3. Daftar Perintah & Panduan Penggunaan
 
-### 🔴 Minggu 1: Setup Core & Foundation (Hardware, Boot, & Allocator)
-* **Edwin:** Setup repo Git, struktur folder, bootloader (`boot.asm`), `linker.ld`, GDT/IDT/ISR (diimplementasikan di `gdt.c`, `idt.c`, `flush.asm`, `isr.asm`), serta konfigurasi awal `Makefile` untuk QEMU.
-* **Rasya:** Perancangan struktur data TCB (Thread Control Block), status thread, dan setup Programmable Interval Timer (`timer.c`).
-* **Andika:** Perancangan header Memory Chunk (`memory.h`) dan implementasi dasar alokator memori dinamis (`memory.c`).
+### A. Perintah User Mode (`wowit-os>`)
+Perintah-perintah ini tersedia di User Mode dan tetap dapat dijalankan saat berada di dalam Kernel Mode:
 
-### 🟡 Minggu 2: Core Features (CLI, Thread Switching, & VFS)
-* **Edwin:** Implementasi driver VGA Text Mode, keyboard handler, serial UART, serta pembuatan CLI internal (*splash logo ASCII* & 3 perintah inti).
-* **Rasya:** Prosedur Context Switching via Assembly (`switch.asm`) dan pembangunan *Preemptive Round-Robin Scheduler*.
-* **Andika:** Mekanisme *boundary checks*, mitigasi *Out of Memory* (OOM), dan perancangan node VFS RAMDisk (`vfs.h`, `vfs.c`).
+| Perintah | Deskripsi & Cara Penggunaan |
+| :--- | :--- |
+| `info` | Menampilkan informasi identitas sistem operasi, arsitektur, dan informasi pengembang. |
+| `kas` | Membuka sub-shell **Aplikasi Pencatat Keuangan** (`wowit-os/kas>`). |
+| `help` | Menampilkan daftar perintah yang tersedia pada mode saat ini. |
+| `exit` | Menghentikan sesi shell (atau keluar dari Kernel Mode kembali ke User Mode). |
+| `kernel mode` | *(Perintah Rahasia)* Meminta autentikasi password untuk masuk ke lingkungan administrator **Kernel Mode**. |
 
-### 🔵 Minggu 3: Concurrency, CRUD VFS, Sinkronisasi & Proteksi
-* **Edwin:** Konsolidasi rutin `init` semua modul ke `main.c` dan *parsing* argumen CLI untuk memanggil fungsi pengujian.
-* **Rasya:** ✅ *Mutex* blocking (ownership + handoff + `trylock`), *counting semaphore* (blocking wait/signal), primitif blocking task (`task_block_on`/`task_wake`), *test-harness* untuk *race condition* & *deadlock* (deteksi wait-for graph + pencegahan via resource ordering & backoff), serta skema proteksi hak akses (`protect.c`: mode USER/KERNEL, izin per fitur, audit log penolakan, critical section).
-* **Andika:** Antarmuka CRUD (Create, Read, Update, Delete) berkas teks pada VFS & uji alokasi dinamis pada *payload* berkas.
+#### Perintah di dalam Sub-Shell Aplikasi Keuangan (`wowit-os/kas>`)
+| Perintah | Format & Contoh Penggunaan | Fungsi |
+| :--- | :--- | :--- |
+| `lihat` | `lihat` | Menampilkan seluruh daftar transaksi pemasukan, pengeluaran, dan total saldo. |
+| `tambah` | `tambah + 50000 Gaji` atau `tambah - 15000 Makan` | Mencatat transaksi pemasukan (`+`) atau pengeluaran (`-`) baru. |
+| `ubah` | `ubah 1 75000` | Mengubah nominal transaksi berdasarkan nomor ID. |
+| `hapus` | `hapus 1` | Menghapus transaksi berdasarkan nomor ID (tunduk pada aturan izin proteksi). |
+| `simpan` | `simpan` | Menyimpan data buku kas secara persisten ke berkas `kas.dat` di RAMDisk VFS. |
+| `exit` | `exit` | Keluar dari sub-shell aplikasi keuangan kembali ke shell utama. |
 
-**Perintah uji baru (PIC 2):** `sync` (mutex aman), `race` (race condition), `semaphore` (producer/consumer), `deadlock` (deteksi + pencegahan), `deadlock-sim` (simulasi lama), `protect` (proteksi hak akses).
+---
 
-### 🟢 Minggu 4: Integrasi Final, Pengujian QEMU, & Penyusunan Laporan
-* **Seluruh Anggota:**
-  * Pengujian *end-to-end* pada QEMU dan pembenahan *bug* (debugging).
-  * Pengambilan dokumentasi log terminal dan eksekusi skenario uji.
-  * Penyusunan Laporan Tugas Besar (target 10–15 halaman).
-  * Finalisasi slide presentasi dan demonstrasi teknis Mini OS.
+### B. Perintah Khusus Kernel Mode (`wowit-kernel#`)
+Perintah berikut hanya dapat diakses setelah berhasil masuk ke **Kernel Mode**:
 
+#### 1. Manajemen Proses, Thread, & Penjadwalan CPU
+| Perintah | Format & Contoh Penggunaan | Fungsi |
+| :--- | :--- | :--- |
+| `quantum` | `quantum` atau `quantum 10` | Melihat atau mengubah nilai *time quantum* Round Robin (1–1000 tick). |
+| `test-rr` | `test-rr AB` atau `test-rr A:150 B:80` | Menjalankan pengujian penjadwalan Round Robin dengan input subjek fleksibel sesuai quantum aktif. |
+| `rr-sim` | `rr-sim` | Menjalankan simulasi cepat Round Robin standar (4 task dengan burst 8 tick). |
+| `preempt-test` | `preempt-test` | Menguji *preemptive multitasking* nyata menggunakan interupsi timer hardware IRQ0 tanpa `yield` manual. |
+| `thread` | `thread` | Mendemonstrasikan siklus hidup thread dari state `NEW` hingga `TERMINATED` pada TCB asli. |
+| `threads` | `threads` | Menampilkan daftar seluruh thread yang terdaftar di tabel TCB kernel. |
+| `sched` | `sched` | Menguji mekanisme perpindahan konteks (*context switching*) antar-thread pada scheduler. |
+| `laporan` | `laporan` | Menjalankan pembuatan laporan keuangan secara konkuren oleh 2 thread terpisah. |
 
-## 📜 Aturan Kolaborasi Kode
+#### 2. Sinkronisasi & Penanganan Deadlock
+| Perintah | Format & Contoh Penggunaan | Fungsi |
+| :--- | :--- | :--- |
+| `race` | `race` | Mendemonstrasikan *race condition* (*lost update*) saat 2 thread mengakses variabel bersama tanpa mutex. |
+| `sync` | `sync` | Mendemonstrasikan penyelesaian *race condition* menggunakan mekanisme `mutex_lock` & `mutex_unlock` atomik. |
+| `semaphore` | `semaphore` | Menguji sinkronisasi akses sumber daya terbatas menggunakan *counting semaphore*. |
+| `deadlock` | `deadlock` | Menguji terjadinya *deadlock* dua thread, deteksi siklus *wait-for graph*, serta solusi *resource ordering* & *trylock*. |
+| `deadlock-sim` | `deadlock-sim` | Simulasi skenario *deadlock* pada kasus transaksi dua kasir. |
 
-1. **File Integrator (`kernel/main.c`, `Makefile`):** Dikelola penuh oleh **Edwin**. Anggota lain hanya perlu menyediakan fungsi *initialization* modul masing-masing (misal: `memory_init()`, `task_init()`, `vfs_init()`).
-2. **Header Files (`kernel/include/*.h`):** Setiap anggota memegang hak milik penuh atas header modulnya untuk mencegah terjadi *merge conflict* pada Git.
-3. **Modul Pengujian (`tests/tests.c`):** Rutin pengujian yang dibuat oleh Rasya & Andika diekspos ke CLI agar bisa dipanggil melalui perintah konsol/shell.
-4. **Satu Folder per Modul:** tiap modul punya folder sendiri di tingkat atas (`sync/`, `process/`, `protection/`, `tests/`, ...), inti kernel + header bersama di `kernel/`, artefak build di `build/` (diabaikan Git).
+#### 3. Manajemen Memori, Sistem Berkas (VFS), & Proteksi
+| Perintah | Format & Contoh Penggunaan | Fungsi |
+| :--- | :--- | :--- |
+| `memtest` | `memtest` | Menguji alokasi/dealokasi heap (`kmalloc`/`kfree`), pengujian *Out of Memory* (OOM), dan *coalescing*. |
+| `vfs` | `vfs` | Menjalankan pengujian otomatis siklus lengkap VFS (`create` $\rightarrow$ `read` $\rightarrow$ `update` $\rightarrow$ `delete`). |
+| `ls` | `ls` | Menampilkan daftar seluruh berkas yang tersimpan di dalam RAMDisk VFS beserta ukurannya. |
+| `touch` | `touch catatan.txt Halo_WOWIT` | Membuat atau memperbarui isi berkas di dalam RAMDisk VFS secara interaktif. |
+| `cat` | `cat catatan.txt` | Membaca dan mencetak isi berkas dari dalam RAMDisk VFS. |
+| `rm` | `rm catatan.txt` | Menghapus berkas dari dalam RAMDisk VFS. |
+| `protect` | `protect` | Menguji penegakan kontrol hak akses antara mode `USER` dan `KERNEL` beserta pencatatan *audit log*. |
+| `izin` | `izin` atau `izin hapus off` | Mengatur izin akses fitur aplikasi secara dinamis (contoh: melarang aksi `hapus` di User Mode). |
+| `log` | `log` | Menampilkan buku log aktivitas transaksi yang tercatat di kernel. |
+
+#### 4. Utilitas Sistem & Navigasi Layar
+| Perintah / Tombol | Fungsi |
+| :--- | :--- |
+| `clear` | Membersihkan seluruh tampilan dan riwayat layar terminal VGA. |
+| `echo <teks>` | Mencetak kembali teks argumen ke layar terminal. |
+| `reboot` | Melakukan *restart* sistem operasi secara penuh. |
+| `logout` | Keluar dari Kernel Mode dan kembali ke User Mode (`wowit-os>`). |
+| Tombol `TAB` | Membuka/menutup widget *real-time* **Thread & Memory Monitor** di pojok kanan atas (khusus Kernel Mode). |
+| `Page Up` / `Page Down` | Menggulir riwayat tampilan layar ke atas atau ke bawah (hingga 200 baris riwayat). |
+| *Mouse Scroll Wheel* | Menggulir tampilan layar ke atas atau ke bawah secara langsung menggunakan roda mouse / trackpad PS/2. |
+
+---
+
+## 4. Cara Kompilasi & Menjalankan di QEMU
+
+Pastikan toolchain `gcc` (i386/multilib), `nasm`, `ld`, `objcopy`, dan `qemu-system-i386` sudah terpasang di lingkungan MSYS2 / Linux Anda:
+
+```bash
+# Membersihkan artefak build sebelumnya, mengompilasi ulang seluruh modul, dan menjalankan QEMU
+make clean && make run
+```
+
+---
+
+## 5. Dokumentasi Penggunaan Generative AI
+
+Dalam proses pengembangan WOWIT OS, perangkat **Generative AI (Google Gemini & OpenCode)** dimanfaatkan sebagai asisten pengembangan dengan batasan dan tanggung jawab berikut:
+1. **Perancangan Arsitektur & Modularisasi:** Membantu menyusun pemisahan struktur direktori subsistem kernel, perancangan antarmuka pemisahan User/Kernel Mode, serta desain tata letak widget monitor berbasis VGA Text Mode.
+2. **Debugging Bare-Metal x86:** Membantu menganalisis konvensi pemanggilan fungsi Assembly-C, remapping PIC 8259 agar interupsi timer (IRQ0) tidak berbenturan dengan *polling* PS/2 keyboard/mouse, serta pencegahan *race condition* pada primitif sinkronisasi.
+3. **Validasi & Pengujian Manual:** Seluruh kode yang dihasilkan telah diaudit, dikompilasi ulang tanpa *warning*, dan diuji fungsionalitasnya secara langsung oleh tim pengembang melalui emulator QEMU.
