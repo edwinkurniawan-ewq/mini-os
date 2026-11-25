@@ -21,7 +21,7 @@ mini-os/
 │   ├── timer.c              # Driver Programmable Interval Timer (PIT) & penghitung tick preemptive
 │   └── vga.c                # Driver VGA Text Mode (0xB8000), scrollback buffer 200 baris, & overlay UI
 ├── finance/
-│   └── finance.c            # Sub-shell aplikasi pencatat keuangan (CRUD) terintegrasi VFS & ACL
+│   └── finance.c            # Sub-shell Catatan Keuangan Pribadi (WOWIT Kas, CRUD) terintegrasi VFS & ACL
 ├── kernel/
 │   ├── include/             # Seluruh file header (.h) untuk antarmuka antar-modul kernel
 │   ├── main.c               # Fungsi utama inisialisasi seluruh subsistem kernel (_kernel_main)
@@ -87,7 +87,10 @@ Perintah-perintah ini tersedia di User Mode dan tetap dapat dijalankan saat bera
 | `ubah` | `ubah 1 75000` | Mengubah nominal transaksi berdasarkan nomor ID. |
 | `hapus` | `hapus 1` | Menghapus transaksi berdasarkan nomor ID (tunduk pada aturan izin proteksi). |
 | `simpan` | `simpan` | Menyimpan data buku kas secara persisten ke berkas `kas.dat` di RAMDisk VFS. |
+| `6` | `6` | Ekspor ringkasan pemasukan, pengeluaran, dan saldo akhir ke `laporan_kas.txt` di RAMDisk VFS. |
 | `exit` | `exit` | Keluar dari sub-shell aplikasi keuangan kembali ke shell utama. |
+
+Seluruh operasi di atas dilindungi `kas_mutex`. Data transaksi dan saldo pribadi juga dipakai oleh uji `race`/`sync`, serta oleh dua resource `mutex_buku_kas` (tabel transaksi pribadi di RAM) dan `mutex_file_vfs` (`kas.dat`) pada perintah `deadlock`. |
 
 ---
 
@@ -109,11 +112,10 @@ Perintah berikut hanya dapat diakses setelah berhasil masuk ke **Kernel Mode**:
 #### 2. Sinkronisasi & Penanganan Deadlock
 | Perintah | Format & Contoh Penggunaan | Fungsi |
 | :--- | :--- | :--- |
-| `race` | `race` | Mendemonstrasikan *race condition* (*lost update*) saat 2 thread mengakses variabel bersama tanpa mutex. |
-| `sync` | `sync` | Mendemonstrasikan penyelesaian *race condition* menggunakan mekanisme `mutex_lock` & `mutex_unlock` atomik. |
+| `race` | `race` | Thread Catat Transaksi dan Thread Auto-Backup / Pemasukan Rutin menambah saldo pribadi tanpa `kas_mutex` → *lost update* nyata. |
+| `sync` | `sync` | Kedua thread pencatat keuangan pribadi menambah saldo dengan `kas_mutex` → saldo akhir akurat 100%. |
 | `semaphore` | `semaphore` | Menguji sinkronisasi akses sumber daya terbatas menggunakan *counting semaphore*. |
-| `deadlock` | `deadlock` | Menguji terjadinya *deadlock* dua thread, deteksi siklus *wait-for graph*, serta solusi *resource ordering* & *trylock*. |
-| `deadlock-sim` | `deadlock-sim` | Simulasi skenario *deadlock* pada kasus transaksi dua kasir. |
+| `deadlock` | `deadlock` | Thread Catat Transaksi (`mutex_buku_kas` → `mutex_file_vfs`) vs Thread Auto-Backup VFS (sebaliknya), deteksi *wait-for graph*, lalu pemulihan dengan *resource ordering* (alternatif: *trylock + backoff*). |
 
 #### 3. Manajemen Memori, Sistem Berkas (VFS), & Proteksi
 | Perintah | Format & Contoh Penggunaan | Fungsi |

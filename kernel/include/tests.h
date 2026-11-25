@@ -7,7 +7,6 @@ void test_sched(void);
 void test_race(void);
 void test_sync(void);
 void test_deadlock(void);
-void test_deadlock_sim(void);
 void test_semaphore(void);
 void test_malloc(void);
 void test_vfs(void);

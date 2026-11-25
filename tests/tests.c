@@ -1,9 +1,9 @@
 /*
  * kernel/tests/tests.c -- Test harness (Minggu 3, PIC 2 / Rasya)
  *
- *  test_sync()      : mutex -> tidak ada lost update
- *  test_race()      : race condition tanpa mutex -> lost update
- *  test_deadlock()  : deadlock nyata + deteksi wait-for graph + pencegahan
+ *  test_sync()      : kas_mutex -> saldo keuangan pribadi tetap akurat
+ *  test_race()      : tanpa kas_mutex -> lost update saldo pribadi
+ *  test_deadlock()  : konflik buku kas vs kas.dat + deteksi wait-for graph
  *  test_semaphore() : counting semaphore (producer / consumer)
  *  test_protect()   : proteksi hak akses + audit log + critical section
  */
@@ -17,189 +17,131 @@
 #include "vga.h"
 #include "memory.h"
 #include "vfs.h"
+#include "finance.h"
 
 #define TEST_ITER 5
 
-/* ===================== 1. UJI MUTEX (aman) ===================== */
-
-static mutex_t      test_mutex;
-static volatile int safe_counter = 0;
-
-static void worker_safe(void) {
-    for (int i = 0; i < TEST_ITER; i++) {
-        mutex_lock(&test_mutex);
-        int tmp = safe_counter;
-        task_yield();                  /* preempt di dalam critical section */
-        safe_counter = tmp + 1;
-        mutex_unlock(&test_mutex);
-    }
-}
+/* ==== 1. MUTEX PADA CATATAN KEUANGAN PRIBADI (WOWIT KAS) ============== */
 
 void test_sync(void) {
-    vga_set_color(0x0C);
-    vga_puts("\n=== UJI MUTEX (aman) ===\n");
-    vga_set_color(0x0F);
-    vga_puts("2 task menambah penghitung yang sama, dilindungi mutex\n");
+    int saldo, count, expected = 2 * KAS_TEST_TOPUP;
 
-    mutex_init(&test_mutex);
-    safe_counter = 0;
+    vga_set_color(0x0C);
+    vga_puts("\n=== UJI MUTEX CATATAN KEUANGAN PRIBADI (sync) ===\n");
+    vga_set_color(0x0F);
+    vga_puts("Thread Catat Transaksi + Thread Auto-Backup menambah saldo pribadi\n");
+    vga_puts("dengan kas_mutex -> tanpa lost update\n");
+
+    finance_test_snapshot();
+    finance_test_reset();
     task_reset();
 
-    int a = task_create("counter-a", worker_safe);
-    int b = task_create("counter-b", worker_safe);
-    vga_puts("  task dibuat: A=");
+    int a = task_create("CatatTransaksi", finance_catat_sync_worker);
+    int b = task_create("AutoBackupVFS", finance_backup_sync_worker);
+    vga_puts("  Thread Catat Transaksi = T");
     vga_put_int(a);
-    vga_puts("  B=");
+    vga_puts(" | Thread Auto-Backup VFS = T");
     vga_put_int(b);
     vga_puts("\n");
 
     task_run_until_blocked();
 
-    vga_puts("  hasil    : ");
-    vga_put_int(safe_counter);
-    vga_puts("   ekspektasi: ");
-    vga_put_int(2 * TEST_ITER);
+    saldo = finance_test_saldo();
+    count = finance_test_count();
+    vga_puts("  saldo pribadi : Rp");
+    vga_put_int(saldo);
+    vga_puts(" | ekspektasi Rp");
+    vga_put_int(expected);
+    vga_puts(" | transaksi: ");
+    vga_put_int(count);
     vga_puts("\n");
-    if (safe_counter == 2 * TEST_ITER) {
+
+    if (saldo == expected && count == 2) {
         vga_set_color(0x0A);
-        vga_puts("  [LULUS] tidak ada lost update, mutex bekerja\n");
+        vga_puts("  [LULUS] saldo pribadi akurat 100%, kas_mutex bekerja\n");
     } else {
         vga_set_color(0x0C);
-        vga_puts("  [GAGAL] masih ada lost update\n");
+        vga_puts("  [GAGAL] saldo pribadi tidak akurat\n");
     }
     vga_set_color(0x0F);
+    finance_test_restore();
     task_reset();
 }
 
-/* ===================== 2. UJI RACE CONDITION ===================== */
-
-static volatile int race_counter = 0;
-
-static void worker_race(void) {
-    for (int i = 0; i < TEST_ITER; i++) {
-        int tmp = race_counter;        /* READ  */
-        task_yield();                  /* preemption di tengah critical section */
-        race_counter = tmp + 1;        /* WRITE */
-    }
-}
+/* ==== 2. RACE CONDITION PADA CATATAN KEUANGAN PRIBADI ================= */
 
 void test_race(void) {
-    vga_set_color(0x0C);
-    vga_puts("\n=== UJI RACE CONDITION ===\n");
-    vga_set_color(0x0F);
-    vga_puts("2 task akses data bersama TANPA mutex\n");
+    int saldo, count, expected = 2 * KAS_TEST_TOPUP;
 
-    race_counter = 0;
+    vga_set_color(0x0C);
+    vga_puts("\n=== UJI RACE CONDITION KEUANGAN PRIBADI (race) ===\n");
+    vga_set_color(0x0F);
+    vga_puts("Thread Catat Transaksi + Thread Auto-Backup / Pemasukan Rutin\n");
+    vga_puts("menambah saldo pribadi TANPA kas_mutex -> lost update\n");
+
+    finance_test_snapshot();
+    finance_test_reset();
     task_reset();
-    task_create("race-a", worker_race);
-    task_create("race-b", worker_race);
+    task_create("CatatTransaksi", finance_catat_race_worker);
+    task_create("AutoBackupVFS", finance_backup_race_worker);
 
     task_run_until_blocked();
 
-    vga_puts("  hasil    : ");
-    vga_put_int(race_counter);
-    vga_puts("   ekspektasi: ");
-    vga_put_int(2 * TEST_ITER);
+    saldo = finance_test_saldo();
+    count = finance_test_count();
+    vga_puts("  saldo pribadi : Rp");
+    vga_put_int(saldo);
+    vga_puts(" | ekspektasi Rp");
+    vga_put_int(expected);
+    vga_puts(" | transaksi: ");
+    vga_put_int(count);
     vga_puts("\n");
-    if (race_counter < 2 * TEST_ITER) {
+
+    if (saldo < expected) {
         vga_set_color(0x0A);
-        vga_puts("  [TERBUKTI] race condition terjadi (lost update ");
-        vga_put_int(2 * TEST_ITER - race_counter);
-        vga_puts(")\n");
+        vga_puts("  [TERBUKTI] lost update pada saldo pribadi: Rp");
+        vga_put_int(expected - saldo);
+        vga_puts("\n");
     } else {
         vga_set_color(0x0E);
         vga_puts("  [TIDAK TERBUKTI] jadwal eksekusi tidak interleaving\n");
     }
     vga_set_color(0x0F);
-    vga_puts("  Bandingkan dengan perintah 'sync' (mutex)\n");
+    vga_puts("  Bandingkan dengan perintah 'sync' (kas_mutex)\n");
+    finance_test_restore();
     task_reset();
 }
 
-/* ===================== 3. UJI DEADLOCK ===================== */
-
-static mutex_t dl_m1, dl_m2;
-
-static void dl_task1(void) {
-    mutex_lock(&dl_m1);
-    vga_puts("  T1 ambil M1 (brankas)\n");
-    task_yield();
-    vga_puts("  T1 minta M2 (buku kas) ...\n");
-    mutex_lock(&dl_m2);                 /* memblokir */
-    vga_puts("  T1 dapat M2\n");
-    mutex_unlock(&dl_m2);
-    mutex_unlock(&dl_m1);
-}
-
-static void dl_task2(void) {
-    mutex_lock(&dl_m2);
-    vga_puts("  T2 ambil M2 (buku kas)\n");
-    task_yield();
-    vga_puts("  T2 minta M1 (brankas) ...\n");
-    mutex_lock(&dl_m1);                 /* memblokir */
-    vga_puts("  T2 dapat M1\n");
-    mutex_unlock(&dl_m1);
-    mutex_unlock(&dl_m2);
-}
-
-/* Pencegahan 1: resource ordering (semua task ambil M1 lalu M2) */
-static void ord_task1(void) {
-    mutex_lock(&dl_m1);
-    vga_puts("  T1 ambil M1 (urutan baku)\n");
-    task_yield();
-    mutex_lock(&dl_m2);
-    vga_puts("  T1 ambil M2 (urutan baku)\n");
-    mutex_unlock(&dl_m2);
-    mutex_unlock(&dl_m1);
-}
-
-static void ord_task2(void) {
-    vga_puts("  T2 minta M1 (urutan baku) ...\n");
-    mutex_lock(&dl_m1);                 /* menunggu, tidak deadlock */
-    vga_puts("  T2 dapat M1\n");
-    mutex_unlock(&dl_m1);
-}
-
-/* Pencegahan 2: trylock + backoff (tidak pernah menunggu) */
-static void try_task1(void) {
-    mutex_lock(&dl_m1);
-    vga_puts("  T1 ambil M1\n");
-    task_yield();
-    mutex_lock(&dl_m2);
-    vga_puts("  T1 ambil M2\n");
-    mutex_unlock(&dl_m2);
-    mutex_unlock(&dl_m1);
-}
-
-static void try_task2(void) {
-    if (!mutex_trylock(&dl_m1)) {
-        vga_puts("  T2 trylock M1 gagal -> backoff, tidak menunggu\n");
-        return;
-    }
-    vga_puts("  T2 dapat M1\n");
-    mutex_unlock(&dl_m1);
-}
+/* ==== 3. DEADLOCK DUA RESOURCE PADA KEUANGAN PRIBADI ================= */
 
 void test_deadlock(void) {
+    int stuck;
+
     vga_set_color(0x0C);
-    vga_puts("\n=== UJI DEADLOCK ===\n");
+    vga_puts("\n=== UJI DEADLOCK CATATAN KEUANGAN PRIBADI (WOWIT KAS) ===\n");
     vga_set_color(0x0F);
+    vga_puts("Kunci 1: mutex_buku_kas (tabel transaksi pribadi di RAM)\n");
+    vga_puts("Kunci 2: mutex_file_vfs  (baca/tulis kas.dat di RAMDisk)\n");
 
-    /* --- skenario 1: deadlock terjadi --- */
-    vga_puts("[1] Dua task mengambil dua mutex dengan urutan terbalik\n");
-    mutex_init(&dl_m1);
-    mutex_init(&dl_m2);
+    finance_test_snapshot();
+
+    /* --- skenario 1: urutan kunci berlawanan -> siklus nyata --- */
+    vga_puts("\n[1] Thread Catat Transaksi: buku_kas -> file_vfs\n");
+    vga_puts("    Thread Auto-Backup VFS: file_vfs -> buku_kas\n");
+    finance_deadlock_prepare();
     task_reset();
-    task_create("dead-t1", dl_task1);
-    task_create("dead-t2", dl_task2);
+    task_create("CatatTransaksi", finance_deadlock_catat_unsafe);
+    task_create("AutoBackupVFS", finance_deadlock_backup_unsafe);
 
-    int stuck = task_run_until_blocked();
-    vga_puts("  taskmacet (WAITING): ");
+    stuck = task_run_until_blocked();
+    vga_puts("  thread macet (WAITING): ");
     vga_put_int(stuck);
     vga_puts("\n");
 
     if (sync_detect_deadlock()) {
         vga_set_color(0x0C);
-        vga_puts("  [TERDETEKSI] deadlock terjadi:\n");
+        vga_puts("  [TERDETEKSI] tabrakan Thread Catat Transaksi & Thread Auto-Backup VFS\n");
+        vga_puts("  pada kedua resource keuangan pribadi (wait-for graph):\n");
         vga_set_color(0x0F);
         sync_print_deadlock();
     } else {
@@ -209,43 +151,42 @@ void test_deadlock(void) {
     }
     task_reset();
 
-    /* --- skenario 2: pencegahan dengan resource ordering --- */
-    vga_puts("\n[2] Pencegahan: semua task mengikuti urutan sumber daya (M1 -> M2)\n");
-    mutex_init(&dl_m1);
-    mutex_init(&dl_m2);
+    /* --- skenario 2: pemulihan dengan resource ordering --- */
+    vga_puts("\n[2] Resource ordering: kedua thread kunci buku_kas lalu file_vfs\n");
+    finance_deadlock_prepare();
     task_reset();
-    task_create("ord-t1", ord_task1);
-    task_create("ord-t2", ord_task2);
+    task_create("CatatTransaksi", finance_deadlock_catat_ordered);
+    task_create("AutoBackupVFS", finance_deadlock_backup_ordered);
     task_run_until_blocked();
     if (sync_detect_deadlock()) {
         vga_set_color(0x0C);
-        vga_puts("  [GAGAL] deadlock masih terjadi\n");
+        vga_puts("  [GAGAL] siklus masih terjadi\n");
         vga_set_color(0x0F);
     } else {
         vga_set_color(0x0A);
-        vga_puts("  [LULUS] deadlock dicegah, semua task selesai\n");
+        vga_puts("  [LULUS] resource ordering memutus siklus, kedua thread selesai\n");
         vga_set_color(0x0F);
     }
     task_reset();
 
-    /* --- skenario 3: pencegahan dengan trylock + backoff --- */
-    vga_puts("\n[3] Pencegahan: trylock + backoff (tidak pernah menunggu)\n");
-    mutex_init(&dl_m1);
-    mutex_init(&dl_m2);
+    /* --- skenario 3: pemulihan alternatif dengan trylock + backoff --- */
+    vga_puts("\n[3] Trylock + backoff: gagal kunci -> mundur, tidak menunggu\n");
+    finance_deadlock_prepare();
     task_reset();
-    task_create("try-t1", try_task1);
-    task_create("try-t2", try_task2);
+    task_create("CatatTransaksi", finance_deadlock_catat_trylock);
+    task_create("AutoBackupVFS", finance_deadlock_backup_trylock);
     task_run_until_blocked();
     if (sync_detect_deadlock()) {
         vga_set_color(0x0C);
-        vga_puts("  [GAGAL] deadlock masih terjadi\n");
+        vga_puts("  [GAGAL] siklus masih terjadi\n");
         vga_set_color(0x0F);
     } else {
         vga_set_color(0x0A);
-        vga_puts("  [LULUS] deadlock dicegah, semua task selesai\n");
+        vga_puts("  [LULUS] trylock + backoff mencegah deadlock\n");
         vga_set_color(0x0F);
     }
     task_reset();
+    finance_test_restore();
 }
 
 /* ===================== 4. UJI COUNTING SEMAPHORE ===================== */
@@ -399,10 +340,6 @@ void test_tasks(void) {
 void test_sched(void) {
     vga_puts("[TEST] Uji coba Thread Lifecycle (CPMK 2):\n");
     run_thread_demo();
-}
-
-void test_deadlock_sim(void) {
-    run_deadlock_demo();
 }
 
 void test_malloc(void) {

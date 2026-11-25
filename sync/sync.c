@@ -41,10 +41,11 @@ static int waitq_pop(int *q, int *head, int *n) {
 
 /* ---- Mutex -------------------------------------------------------------- */
 
-void mutex_init(mutex_t *m) {
+void mutex_init_named(mutex_t *m, const char *name) {
     m->locked   = 0;
     m->owner_id = -1;
     m->head = m->tail = m->nwait = 0;
+    m->name = name ? name : "mutex";
 
     /* daftarkan sekali saja untuk keperluan deteksi deadlock */
     for (int i = 0; i < mutex_reg_count; i++) {
@@ -53,6 +54,10 @@ void mutex_init(mutex_t *m) {
     if (mutex_reg_count < SYNC_MAX_MUTEX) {
         mutex_reg[mutex_reg_count++] = m;
     }
+}
+
+void mutex_init(mutex_t *m) {
+    mutex_init_named(m, "mutex");
 }
 
 void mutex_lock(mutex_t *m) {
@@ -207,19 +212,39 @@ int sync_detect_deadlock(void) {
     return 0;
 }
 
+static void print_wait_task(int id) {
+    tcb_t *t = task_get(id);
+
+    if (t && t->name[0]) {
+        vga_puts(t->name);
+        vga_puts("(T");
+        vga_put_int(id);
+        vga_putc(')');
+    } else {
+        vga_puts("T");
+        vga_put_int(id);
+    }
+}
+
 void sync_print_deadlock(void) {
     vga_set_color(0x0C);
-    vga_puts("[DEADLOCK] Siklus wait-for: ");
+    vga_puts("[DEADLOCK] Siklus wait-for graph:\n");
     for (int i = 0; i < deadlock_len; i++) {
-        vga_puts("T");
-        vga_put_int(deadlock_chain[i]);
-        vga_puts(" -> ");
+        tcb_t *t = task_get(deadlock_chain[i]);
+        mutex_t *m = NULL;
+
+        if (t && t->wait_kind == WAIT_MUTEX && t->wait_res) {
+            m = (mutex_t *)t->wait_res;
+        }
+
+        vga_puts("  ");
+        print_wait_task(deadlock_chain[i]);
+        vga_puts(" --[menunggu ");
+        vga_puts(m && m->name ? m->name : "mutex");
+        vga_puts("]--> ");
+        print_wait_task(deadlock_chain[(i + 1) % deadlock_len]);
+        vga_putc('\n');
     }
-    if (deadlock_len > 0) {
-        vga_puts("T");
-        vga_put_int(deadlock_chain[0]);
-    }
-    vga_puts("\n");
     vga_set_color(0x0F);
 }
 
