@@ -12,6 +12,7 @@
 #include "task.h"
 #include "kernel.h"
 #include "vga.h"
+#include "irq.h"
 
 #define SYNC_MAX_MUTEX 8
 
@@ -55,41 +56,55 @@ void mutex_init(mutex_t *m) {
 }
 
 void mutex_lock(mutex_t *m) {
+    uint32_t flags = irq_save_disable();
     int me = task_current_id();
 
     if (!m->locked) {
         m->locked   = 1;
         m->owner_id = me;
+        irq_restore(flags);
         return;
     }
 
-    /* Diperebutkan: antre lalu blokir sampai mutex dilepas pemilik */
+    /* Antrean + perubahan status WAITING harus satu blok atomik terhadap
+     * IRQ0, jika tidak thread bisa "terbangun" sebelum sempat diblokir. */
     waitq_push(m->waiters, &m->tail, &m->nwait, me);
     task_block_on(m, WAIT_MUTEX);
-    /* Ownership sudah dipindahkan oleh mutex_unlock ke task ini */
+    /* Ownership sudah dipindahkan mutex_unlock ke task ini. */
+    irq_restore(flags);
 }
 
 int mutex_trylock(mutex_t *m) {
-    if (m->locked) return 0;
-    m->locked   = 1;
-    m->owner_id = task_current_id();
-    return 1;
+    uint32_t flags = irq_save_disable();
+    int ok = 0;
+
+    if (!m->locked) {
+        m->locked   = 1;
+        m->owner_id = task_current_id();
+        ok = 1;
+    }
+    irq_restore(flags);
+    return ok;
 }
 
 int mutex_unlock(mutex_t *m) {
-    if (!m->locked) return 0;
-    if (m->owner_id != task_current_id()) return 0;  /* bukan pemilik */
+    uint32_t flags = irq_save_disable();
+    int ok = 0;
 
-    int w = waitq_pop(m->waiters, &m->head, &m->nwait);
-    if (w >= 0) {
-        /* Handoff: lock tidak pernah "bebas" di antara dua task */
-        m->owner_id = w;
-        task_wake(w);
-    } else {
-        m->locked   = 0;
-        m->owner_id = -1;
+    if (m->locked && m->owner_id == task_current_id()) {
+        int w = waitq_pop(m->waiters, &m->head, &m->nwait);
+        if (w >= 0) {
+            /* Handoff: lock tidak pernah "bebas" di antara dua task */
+            m->owner_id = w;
+            task_wake(w);
+        } else {
+            m->locked   = 0;
+            m->owner_id = -1;
+        }
+        ok = 1;
     }
-    return 1;
+    irq_restore(flags);
+    return ok;
 }
 
 int mutex_is_locked(mutex_t *m) {
@@ -112,24 +127,41 @@ void semaphore_init(semaphore_t *s, int initial) {
 }
 
 void semaphore_wait(semaphore_t *s) {
-    while (s->value <= 0) {
-        int me = task_current_id();
-        waitq_push(s->waiters, &s->tail, &s->nwait, me);
+    for (;;) {
+        uint32_t flags = irq_save_disable();
+
+        if (s->value > 0) {
+            s->value--;
+            irq_restore(flags);
+            return;
+        }
+
+        waitq_push(s->waiters, &s->tail, &s->nwait, task_current_id());
         task_block_on(s, WAIT_SEM);
+        irq_restore(flags);
     }
-    s->value--;
 }
 
 int semaphore_trywait(semaphore_t *s) {
-    if (s->value <= 0) return 0;
-    s->value--;
-    return 1;
+    uint32_t flags = irq_save_disable();
+    int ok = 0;
+
+    if (s->value > 0) {
+        s->value--;
+        ok = 1;
+    }
+    irq_restore(flags);
+    return ok;
 }
 
 void semaphore_signal(semaphore_t *s) {
+    uint32_t flags = irq_save_disable();
+
     s->value++;
     int w = waitq_pop(s->waiters, &s->head, &s->nwait);
     if (w >= 0) task_wake(w);
+
+    irq_restore(flags);
 }
 
 int semaphore_value(semaphore_t *s) {

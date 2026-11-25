@@ -2,6 +2,8 @@
 
 Proyek pengembangan Sistem Operasi Mini (Mini OS) berbasis 32-bit x86/x86_64 yang berjalan di atas emulator **QEMU**. Proyek ini mencakup komponen *low-level bootloader*, *kernel CLI/shell*, *multithreading & scheduler*, *primitif sinkronisasi*, *dynamic memory allocator*, hingga *Virtual File System (VFS)* berbasis RAMDisk.
 
+> **Dokumentasi Generative AI:** sesuai catatan `requirement.txt`, penggunaan bantuan AI selama pengembangan didokumentasikan di [`docs/AI_USAGE.md`](docs/AI_USAGE.md).
+
 ---
 
 ## 🛠️ Prasyarat & Lingkungan Pengembangan
@@ -64,7 +66,7 @@ make run
 ```
 *Atau jalankan perintah QEMU langsung secara manual:*
 ```bash
-qemu-system-i386 -kernel build/mini-os.bin
+qemu-system-i386 -kernel build/kernel.bin
 # atau jika menggunakan format disk image:
 qemu-system-i386 -fda build/mini-os.img
 ```
@@ -110,11 +112,15 @@ mini-os/
 │   └── vfs.c            # Virtual File System berbasis RAMDisk
 ├── kernel/              # Inti kernel & header bersama
 │   ├── main.c           # Entry-point kernel & registrasi modul
-│   ├── stubs.c          # Stub fungsi bawaan
+│   ├── gdt.c            # Global Descriptor Table 32-bit
+│   ├── idt.c            # IDT 256 entri + PIC 8259 remap + IRQ dispatch
+│   ├── stubs.c          # Cadangan modul kernel (tidak ada stub aktif)
 │   └── include/         # Semua header (.h) — dipakai lintas modul
 │       ├── cli.h        # Antarmuka Shell / CLI
 │       ├── finance.h    # Aplikasi pencatat keuangan
+│       ├── idt.h        # IDT, registers_t, vektor yield
 │       ├── io.h         # Helper akses port I/O
+│       ├── irq.h        # Simpan/pulihkan EFLAGS (cli/sti atomik)
 │       ├── kernel.h     # Definisi umum kernel
 │       ├── keyboard.h   # Antarmuka driver keyboard
 │       ├── logbook.h    # Buku log aktivitas
@@ -146,7 +152,7 @@ mini-os/
 ## 📅 Roadmap & Progress Mingguan (Weekly Planner)
 
 ### 🔴 Minggu 1: Setup Core & Foundation (Hardware, Boot, & Allocator)
-* **Edwin:** Setup repo Git, struktur folder, bootloader (`boot.asm`), `linker.ld`, GDT/IDT/ISR dasar, serta konfigurasi awal `Makefile` untuk QEMU.
+* **Edwin:** Setup repo Git, struktur folder, bootloader (`boot.asm`), `linker.ld`, GDT/IDT/ISR (diimplementasikan di `gdt.c`, `idt.c`, `flush.asm`, `isr.asm`), serta konfigurasi awal `Makefile` untuk QEMU.
 * **Rasya:** Perancangan struktur data TCB (Thread Control Block), status thread, dan setup Programmable Interval Timer (`timer.c`).
 * **Andika:** Perancangan header Memory Chunk (`memory.h`) dan implementasi dasar alokator memori dinamis (`memory.c`).
 

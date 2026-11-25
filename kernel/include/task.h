@@ -39,10 +39,15 @@ typedef struct {
 
 void  task_init(void);
 int   task_create(const char *name, void (*entry)(void));
+int   task_create_pending(const char *name, void (*entry)(void)); /* NEW */
+void  task_start(int id);                      /* NEW -> READY */
 void  task_yield(void);
 void  task_exit(void);
 void  schedule(void);
 void  task_print_all(void);
+void  task_preempt_demo(void);
+void  task_clear_trace(void);
+void  task_print_trace(void);
 
 /* --- primitif blocking (Minggu 3: sinkronisasi) ------------------------- */
 int   task_current_id(void);

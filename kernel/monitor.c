@@ -21,7 +21,8 @@
 #define W            VGA_WIDGET_COLS
 #define ACT_MAX      6
 #define ACT_NAME_LEN 10
-#define SHOW_ROWS    7      /* T0 kernel + 6 aktivitas terakhir */
+#define TASK_ROWS    8      /* T0 kernel + 7 TCB teratas */
+#define HIST_ROWS    3      /* riwayat perintah terakhir */
 
 typedef struct {
     char     name[ACT_NAME_LEN];
@@ -149,7 +150,8 @@ static void draw_widget(int repaint_background) {
     row_end(line, &col);
     vga_widget_write(VGA_WIDGET_ROW + 3, VGA_WIDGET_COL, line, 0x0F);
 
-    /* Baris pertama: task kernel nyata, detiknya terus berjalan. */
+    /* Tabel UTAMA dibaca langsung dari TCB kernel (task.c), bukan dari
+     * array aktivitas buatan. T0 = task kernel. */
     {
         tcb_t *k = task_get(0);
         const char *name = (k && k->name[0]) ? k->name : "kernel";
@@ -175,37 +177,56 @@ static void draw_widget(int repaint_background) {
         shown = 1;
     }
 
-    /* Aktivitas terbaru langsung mengikuti T0 kernel (urutan kronologis). */
-    for (int k = 0; k < ACT_MAX && shown < SHOW_ROWS; k++) {
-        int idx = activity_next - ACT_MAX + k;
-        if (idx < 0) idx += ACT_MAX;
-        if (!acts[idx].in_use) continue;
+    for (int i = 1; i < task_total() && shown < TASK_ROWS; i++) {
+        tcb_t *t = task_get(i);
+        if (!t) continue;
 
-        if (acts[idx].state != TASK_TERMINATED) active++;
+        if (t->state != TASK_TERMINATED) active++;
 
         row_begin(line, &col);
         line_text(line, &col, "T");
-        line_uint(line, &col, acts[idx].id);
+        line_uint(line, &col, (uint32_t)t->id);
         line_pad(line, &col, 6);
-        line_text_n(line, &col, acts[idx].name, 8);
+        line_text_n(line, &col, t->name, 8);
         line_pad(line, &col, 16);
-        line_text_n(line, &col, state_name(acts[idx].state), 12);
+        line_text_n(line, &col, state_name(t->state), 12);
         line_pad(line, &col, 28);
-        line_uint(line, &col, (uint32_t)acts[idx].mem_kb);
+        line_uint(line, &col, (uint32_t)(STACK_SIZE / 1024));
         line_text(line, &col, " KB");
         line_pad(line, &col, 36);
-        line_uint(line, &col, acts[idx].ticks);
+        line_uint(line, &col, t->cpu_ticks);
         line_text(line, &col, " tick");
         row_end(line, &col);
         vga_widget_write(VGA_WIDGET_ROW + 4 + shown, VGA_WIDGET_COL, line, 0x0F);
         shown++;
     }
 
-    /* Sisa baris tabel dikosongkan agar kotak tidak berantakan. */
-    for (int i = shown; i < SHOW_ROWS; i++) {
+    for (int i = shown; i < TASK_ROWS; i++) {
         row_begin(line, &col);
         row_end(line, &col);
         vga_widget_write(VGA_WIDGET_ROW + 4 + i, VGA_WIDGET_COL, line, 0x1F);
+    }
+
+    /* Pemisah tabel TCB dengan riwayat aktivitas terakhir. */
+    row_border(line);
+    vga_widget_write(VGA_WIDGET_ROW + 12, VGA_WIDGET_COL, line, 0x0E);
+
+    for (int h = 0; h < HIST_ROWS; h++) {
+        int idx = activity_next - HIST_ROWS + h;
+        if (idx < 0) idx += ACT_MAX;
+
+        row_begin(line, &col);
+        line_text(line, &col, h == 0 ? "TERAKHIR: " : "          ");
+        if (acts[idx].in_use) {
+            line_text_n(line, &col, acts[idx].name, ACT_NAME_LEN - 1);
+            line_pad(line, &col, 20);
+            line_text_n(line, &col, state_name(acts[idx].state), 12);
+            line_pad(line, &col, 38);
+            line_uint(line, &col, acts[idx].ticks);
+            line_text(line, &col, " tick");
+        }
+        row_end(line, &col);
+        vga_widget_write(VGA_WIDGET_ROW + 13 + h, VGA_WIDGET_COL, line, 0x1F);
     }
 
     /* Footer ringkasan tetap di dasar widget. */
@@ -219,10 +240,10 @@ static void draw_widget(int repaint_background) {
                                      vfs_get_used_bytes()) / 1024u));
     line_text(line, &col, " KB");
     row_end(line, &col);
-    vga_widget_write(VGA_WIDGET_ROW + 11, VGA_WIDGET_COL, line, 0x1F);
+    vga_widget_write(VGA_WIDGET_ROW + 16, VGA_WIDGET_COL, line, 0x1F);
 
     row_border(line);
-    vga_widget_write(VGA_WIDGET_ROW + 12, VGA_WIDGET_COL, line, 0x0E);
+    vga_widget_write(VGA_WIDGET_ROW + 17, VGA_WIDGET_COL, line, 0x0E);
 }
 
 /* ---- API ---------------------------------------------------------------- */

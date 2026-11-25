@@ -1,6 +1,7 @@
 #include "protect.h"
 #include "kernel.h"
 #include "vga.h"
+#include "irq.h"
 
 #define PROTECT_AUDIT_MAX 8
 
@@ -14,6 +15,7 @@ static struct {
 } audit_log[PROTECT_AUDIT_MAX];
 static int audit_total = 0;
 static int crit_depth  = 0;
+static uint32_t crit_flags = 0;   /* EFLAGS saat section outermost dimasuki */
 
 static const char *perm_name(perm_type_t perm) {
     switch (perm) {
@@ -59,6 +61,7 @@ void protect_init(void) {
     }
     audit_total = 0;
     crit_depth  = 0;
+    crit_flags  = 0;
 }
 
 os_mode_t protect_get_mode(void) {
@@ -124,15 +127,20 @@ int protect_require(perm_type_t perm, const char *action) {
 
 void protect_enter_critical(void) {
     if (crit_depth == 0) {
-        __asm__ volatile ("cli");
+        crit_flags = irq_save_disable();
     }
     crit_depth++;
 }
 
 void protect_exit_critical(void) {
-    if (crit_depth > 0) crit_depth--;
-    /* ponytail: interupsi tidak dinyalakan lagi -> tambahkan "sti" saat
-       IDT + IRQ0 sudah di-wire, supaya preemption tetap berjalan. */
+    if (crit_depth <= 0) return;
+
+    crit_depth--;
+    if (crit_depth == 0) {
+        /* Pulihkan IF persis seperti sebelum section dimasuki. Jika
+         * interupsi memang sudah mati, EFLAGS dikembalikan dengan IF=0. */
+        irq_restore(crit_flags);
+    }
 }
 
 void protect_print_audit(void) {

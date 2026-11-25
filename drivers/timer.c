@@ -9,8 +9,8 @@
  * Target tick rate: 100 Hz  ->  divisor = 11931
  * Mode 2 (rate generator): IRQ0 fires every divisor cycles
  *
- * NOTE: IRQ0 handler registered by Edwin's IDT (Week 2).
- *       timer_tick() called from that handler.
+ * IRQ0 di-remap ke vektor 32 oleh kernel/idt.c dan dipanggil dari
+ * irq_dispatch() setiap kali PIT menembak.
  */
 
 #define PIT_BASE_FREQ   1193182UL
@@ -25,7 +25,7 @@
 static volatile uint32_t tick_count = 0;
 static uint32_t slice_ticks = 0;   /* tick berjalan pada quantum RR aktif */
 
-/* Polling PIT saat IRQ0 belum di-wire (idt_init masih stub). */
+/* Polling PIT tetap ada untuk menjaga tampilan monitor saat menunggu input. */
 static uint16_t last_pit_count = (uint16_t)PIT_DIVISOR;
 static uint32_t pit_accum = 0;
 
@@ -104,7 +104,7 @@ static void advance_tick(int do_schedule) {
     }
 }
 
-/* Called from IRQ0 handler — wired by Edwin in Week 2 */
+/* Dipanggil dari irq_dispatch() pada vektor 32 (IRQ0). */
 void timer_tick(void) {
     advance_tick(1);
 }
