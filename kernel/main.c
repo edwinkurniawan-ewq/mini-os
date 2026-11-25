@@ -12,15 +12,14 @@
 #include "timer.h"
 #include "keyboard.h"
 #include "sync.h"
-
-/* Implementasi stub di kernel/stubs.c (GDT/IDT belum dipakai QEMU). */
-void gdt_init(void);
-void idt_init(void);
+#include "idt.h"
 
 void kernel_main(void) {
     vga_set_color(0x0F);
     vga_clear();
 
+    /* GDT -> IDT/PIC dipasang lebih dulu, tetapi interupsi baru dinyalakan
+     * setelah semua struktur data kernel siap (lihat sti di bawah). */
     gdt_init();
     idt_init();
     memory_init();
@@ -39,9 +38,9 @@ void kernel_main(void) {
     monitor_init();
 
     cli_init();
-    cli_run();
 
-    while (1) {
-        __asm__ __volatile__("hlt");
-    }
+    /* Semua primitive (mutex, critical section, TCB) sudah atomik. */
+    __asm__ volatile ("sti");
+
+    cli_run();                  /* loop tak berhenti: tidak pernah kembali */
 }

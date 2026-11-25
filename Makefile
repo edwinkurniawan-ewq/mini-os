@@ -17,6 +17,8 @@ TARGET_PE  = $(BUILD)/kernel.exe
 TARGET_ELF = $(BUILD)/kernel.bin
 
 ASM_SOURCES = boot/boot.asm \
+              boot/flush.asm \
+              boot/isr.asm \
               process/switch.asm
 
 C_SOURCES   = drivers/vga.c \
@@ -24,8 +26,10 @@ C_SOURCES   = drivers/vga.c \
               drivers/timer.c \
               kernel/main.c \
               kernel/stubs.c \
-               kernel/rr.c \
-               kernel/monitor.c \
+              kernel/gdt.c \
+              kernel/idt.c \
+              kernel/rr.c \
+              kernel/monitor.c \
               cli/cli.c \
               finance/finance.c \
               logbook/logbook.c \

@@ -1,40 +1,34 @@
-; kernel/src/switch.asm  --  Low-level context switch
+; process/switch.asm -- Low-level context switch untuk scheduler preemptive.
 ;
 ; void context_switch(tcb_t *old, tcb_t *new);
 ;
-; old->esp is at offset 0 in the TCB struct.
-; Saves callee-saved registers (EBX, ESI, EDI) + EBP onto old stack,
-; stores ESP into old->esp, loads new->esp, restores registers, returns.
+; Dipanggil DARI DALAM handler interupsi (IRQ0 atau int 0x30). Setiap task
+; memiliki interrupt frame lengkap di stack-nya, sehingga setelah switch
+; epilogue isr.asm melakukan popa + iretd dan kembali ke task yang dipilih.
 ;
-; If old == NULL: skip save (first switch from kernel bootstrap).
+; Prolog menyimpan EBP/EBX/ESI/EDI sesuai ABI cdecl; tcb->esp menyimpan
+; posisi ESP setelah keempat register tersebut ditumpuk.
 
 section .text
 global _context_switch
 
 _context_switch:
     push    ebp
-    mov     ebp, esp            ; standard prologue
-
-    mov     eax, [ebp + 8]      ; eax = old
-    test    eax, eax
-    jz      .load_new           ; old == NULL -> skip save
-
-    ; --- save callee-saved registers ---
     push    ebx
     push    esi
     push    edi
 
-    ; --- save ESP into old->esp (offset 0 in TCB) ---
-    mov     [eax], esp
+    mov     eax, [esp + 20]     ; argumen pertama: old
+    test    eax, eax
+    jz      .load_new
+    mov     [eax], esp          ; simpan ESP (termasuk 4 regs callee-saved)
 
 .load_new:
-    mov     eax, [ebp + 12]     ; eax = new
-    mov     esp, [eax]          ; esp = new->esp
+    mov     eax, [esp + 24]     ; argumen kedua: new
+    mov     esp, [eax]
 
-    ; --- restore callee-saved registers ---
     pop     edi
     pop     esi
     pop     ebx
-
-    pop     ebp                 ; restore EBP
-    ret                         ; return into new thread's context
+    pop     ebp
+    ret                         ; lanjutkan eksekusi task baru

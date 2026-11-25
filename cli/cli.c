@@ -28,6 +28,28 @@ static int streq(const char *a, const char *b) {
     return *a == *b;
 }
 
+static int str_len(const char *s) {
+    int n = 0;
+    while (s[n]) n++;
+    return n;
+}
+
+static const char *skip_spaces(const char *p) {
+    while (*p == ' ') p++;
+    return p;
+}
+
+/* Ambil satu token dipisah spasi; kembalikan 0 bila tidak ada token. */
+static int copy_token(const char **cursor, char *dst, int max) {
+    const char *p = skip_spaces(*cursor);
+    int n = 0;
+
+    while (*p && *p != ' ' && n < max - 1) dst[n++] = *p++;
+    dst[n] = '\0';
+    *cursor = p;
+    return n > 0;
+}
+
 static int starts_with(const char *str, const char *prefix) {
     while (*prefix) {
         if (*str++ != *prefix++) return 0;
@@ -118,8 +140,14 @@ static void print_menu_kernel(void) {
     vga_puts("  semaphore    - uji counting semaphore\n");
     vga_puts("  sched        - uji penjadwalan / lifecycle thread\n");
     vga_puts("  memtest      - uji alokasi memori kmalloc/kfree\n");
-    vga_puts("  vfs          - uji VFS RAMDisk\n");
+    vga_puts("  vfs          - uji VFS RAMDisk (create/read/update/delete)\n");
+    vga_puts("  preempt-test - bukti preemption IRQ0: 2 thread CPU-bound tanpa yield\n");
+    vga_puts("  ls           - daftar berkas RAMDisk\n");
+    vga_puts("  cat <nama>   - baca isi berkas RAMDisk\n");
+    vga_puts("  touch <nama> <isi> - buat/update berkas RAMDisk\n");
+    vga_puts("  rm <nama>    - hapus berkas RAMDisk\n");
     vga_puts("  protect      - uji proteksi hak akses & audit log\n");
+    vga_puts("    Uji manual: izin hapus off -> logout -> kas -> pilih 4 (hapus)\n");
     vga_puts("  threads      - daftar thread terdaftar\n");
     vga_puts("  log          - buku log aktivitas kas\n");
     vga_puts("  laporan      - laporan kas oleh 2 thread\n");
@@ -411,6 +439,94 @@ static void handle_test_rr(const char *args) {
     monitor_activity_end(rr_get_quantum());
 }
 
+/* ---- perintah VFS interaktif -------------------------------------------- */
+
+static void handle_cat(const char *args) {
+    char name[VFS_MAX_FILENAME];
+    char buf[256];
+    int n;
+
+    if (!copy_token(&args, name, (int)sizeof(name))) {
+        vga_set_color(0x0C);
+        vga_puts("[!] Format: cat <nama_file>\n");
+        vga_set_color(0x0F);
+        return;
+    }
+
+    n = vfs_read(name, buf, (int)sizeof(buf) - 1);
+    if (n < 0) {
+        vga_set_color(0x0C);
+        vga_puts("[!] Berkas tidak ditemukan: ");
+        vga_puts(name);
+        vga_puts("\n");
+        vga_set_color(0x0F);
+        return;
+    }
+
+    buf[n] = '\0';
+    vga_puts(buf);
+    vga_putc('\n');
+}
+
+static void handle_touch(const char *args) {
+    char name[VFS_MAX_FILENAME];
+    const char *content;
+    int len;
+
+    if (!copy_token(&args, name, (int)sizeof(name))) {
+        vga_set_color(0x0C);
+        vga_puts("[!] Format: touch <nama_file> [isi]\n");
+        vga_set_color(0x0F);
+        return;
+    }
+
+    content = skip_spaces(args);
+    len = str_len(content);
+
+    if (vfs_write(name, content, (size_t)len) != 0) {
+        vga_set_color(0x0C);
+        vga_puts("[!] Gagal menulis berkas: ");
+        vga_puts(name);
+        vga_puts("\n");
+        vga_set_color(0x0F);
+        return;
+    }
+
+    vga_set_color(0x0A);
+    vga_puts("[OK] ");
+    vga_puts(name);
+    vga_puts (" (");
+    vga_put_int(len);
+    vga_puts(" B)\n");
+    vga_set_color(0x0F);
+}
+
+static void handle_rm(const char *args) {
+    char name[VFS_MAX_FILENAME];
+
+    if (!copy_token(&args, name, (int)sizeof(name))) {
+        vga_set_color(0x0C);
+        vga_puts("[!] Format: rm <nama_file>\n");
+        vga_set_color(0x0F);
+        return;
+    }
+
+    if (vfs_delete(name) != 0) {
+        vga_set_color(0x0C);
+        vga_puts("[!] Berkas tidak ditemukan: ");
+        vga_puts(name);
+        vga_puts("\n");
+        vga_set_color(0x0F);
+        return;
+    }
+
+    vga_set_color(0x0A);
+    vga_puts("[OK] dihapus: ");
+    vga_puts(name);
+    vga_puts("\n");
+    vga_set_color(0x0F);
+}
+
 static void unknown_command(const char *cmd) {
     vga_set_color(0x0C);
     vga_puts("Perintah tidak dikenal: ");
@@ -460,6 +576,16 @@ static void run_command(const char *cmd) {
             tracked_call("memtest", test_malloc);
         } else if (streq(cmd, "vfs") || streq(cmd, "vfstest")) {
             tracked_call("vfs", test_vfs);
+        } else if (streq(cmd, "preempt-test")) {
+            tracked_call("preempt", task_preempt_demo);
+        } else if (streq(cmd, "ls")) {
+            vfs_list();
+        } else if (starts_with(cmd, "cat")) {
+            handle_cat(cmd + 3);
+        } else if (starts_with(cmd, "touch")) {
+            handle_touch(cmd + 5);
+        } else if (starts_with(cmd, "rm")) {
+            handle_rm(cmd + 2);
         } else if (streq(cmd, "protect")) {
             tracked_call("protect", test_protect);
         } else if (streq(cmd, "threads")) {

@@ -73,8 +73,8 @@ char keyboard_getchar(void) {
     for (;;) {
         /*
          * Polling non-blocking: setiap iterasi baca counter PIT agar tick
-         * terus berjalan walaupun IRQ0 belum di-wire, lalu segarkan widget
-         * bila detik thread berubah. Tidak ada hlt/waiting pasif di sini.
+         * terus berjalan selain IRQ0 aktif, lalu segarkan widget bila detik
+         * thread berubah. Tidak ada hlt/waiting pasif di sini.
          */
         timer_poll_ticks();
         monitor_poll();
